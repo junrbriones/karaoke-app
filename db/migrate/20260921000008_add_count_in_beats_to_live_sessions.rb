@@ -1,0 +1,5 @@
+class AddCountInBeatsToLiveSessions < ActiveRecord::Migration[8.0]
+  def change
+    add_column :live_sessions, :count_in_beats, :integer, null: false, default: 4
+  end
+end
