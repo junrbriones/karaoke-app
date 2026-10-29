@@ -199,100 +199,8 @@ export function lintScreens(screens: PhrasingScreen[]): PhrasingLint[] {
   return warnings
 }
 
-export interface ScreenWindow {
-  start: number
-  end: number
-}
-
-// Each screen's [start, end) playback window. A lyric screen starts at its
-// first tapped token; an instrumental (or not-yet-tapped) screen starts
-// where the previous one left off, so it reads as a rest that fills the
-// gap between two lines rather than a jump cut.
-export function computeScreenWindows(
-  screens: PhrasingScreen[],
-): ScreenWindow[] {
-  const starts: number[] = []
-  let lastEnd = 0
-
-  for (const screen of screens) {
-    const times = screen.lines
-      .flatMap((l) => l.tokens)
-      .map((t) => t.time)
-      .filter((t): t is number => t != null)
-
-    if (times.length) {
-      starts.push(times[0])
-      lastEnd = times[times.length - 1]
-    } else {
-      starts.push(lastEnd)
-    }
-  }
-
-  return starts.map((start, i) => ({
-    start,
-    end: i + 1 < starts.length ? starts[i + 1] : Infinity,
-  }))
-}
-
-export function findActiveScreenIndex(
-  windows: ScreenWindow[],
-  currentTime: number,
-): number {
-  for (let i = windows.length - 1; i >= 0; i--) {
-    if (currentTime >= windows[i].start) return i
-  }
-  return windows.length ? 0 : -1
-}
-
-export interface ActiveToken {
-  lineIndex: number
-  tokenIndex: number
-  // 0..1 sweep progress through the current token, for a mid-word/
-  // mid-syllable highlight fill rather than an all-or-nothing flip.
-  progress: number
-}
-
-export function findActiveToken(
-  screen: PhrasingScreen,
-  currentTime: number,
-): ActiveToken | null {
-  const flat: {
-    lineIndex: number
-    tokenIndex: number
-    token: PhrasingToken
-  }[] = []
-  screen.lines.forEach((line, lineIndex) => {
-    line.tokens.forEach((token, tokenIndex) => {
-      flat.push({ lineIndex, tokenIndex, token })
-    })
-  })
-
-  let activeIdx = -1
-  for (let i = 0; i < flat.length; i++) {
-    if (
-      flat[i].token.time != null &&
-      (flat[i].token.time as number) <= currentTime
-    ) {
-      activeIdx = i
-    }
-  }
-  if (activeIdx === -1) return null
-
-  const active = flat[activeIdx]
-  const next = flat[activeIdx + 1]
-  const start = active.token.time as number
-  let progress = 1
-  if (next && next.token.time != null) {
-    const span = next.token.time - start
-    progress = span > 0 ? Math.min(1, (currentTime - start) / span) : 1
-  }
-
-  return {
-    lineIndex: active.lineIndex,
-    tokenIndex: active.tokenIndex,
-    progress,
-  }
-}
+// Playback timing (screen windows, the active token, sweep progress) lives
+// in lib/lyricDisplay.ts, shared with the chord-sheet tempo guide.
 
 // Seeds the phrasing textarea from a song's existing chord-sheet body, so
 // there's no retyping: lyric lines carry over as-is, section/blank breaks
@@ -307,6 +215,14 @@ export function lyricsOnlyText(blocks: SongBlock[]): string {
   for (const block of blocks) {
     if (block.type === "blank" || block.type === "section") {
       breakParagraph()
+      // A chord sheet's [Male]/[Female]/[All] sections carry over as the
+      // phrasing's duet markers.
+      if (
+        block.type === "section" &&
+        MARKER_RE.test(`[${block.text.trim()}]`)
+      ) {
+        paragraphs[paragraphs.length - 1].push(`[${block.text.trim()}]`)
+      }
       continue
     }
 

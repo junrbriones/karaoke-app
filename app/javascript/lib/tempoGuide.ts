@@ -3,27 +3,37 @@
 // an audio track or manually-tapped timestamps.
 //
 // Heuristic: each lyric line takes `beatsPerLine` beats (one bar in 4/4 by
-// default), or a multiple of that for a multi-bar instrumental block (see
-// chordSheet.ts's "xN" marker). Within a line, time is split across its
-// words in proportion to word length, which tracks singing pace better
-// than splitting evenly. A chords-only line (an intro, ad lib, etc.) has no
-// words to pace against, so its chords step evenly through the line
-// instead -- that keeps the tempo guide's highlight/ball useful there too,
-// rather than just going dark until the lyrics resume.
+// default). Within a line, time is split across its words in proportion
+// to word length, which tracks singing pace better than splitting evenly.
+//
+// A chords-only line (an intro, interlude, solo...) is timed the way a band
+// reads it: one bar per chord, or per dash-joined group ("Dm-G7sus-G7-" is
+// one bar split three ways), the whole run played `times` times ("x2").
+// Each chord gets a timeline entry, so the highlight steps through the
+// chords exactly when they're due and the band can follow along.
 
-import type { SongBlock } from "@/lib/chordSheet"
+import { type SongBlock, chordGroups } from "@/lib/chordSheet"
 
 export type TimelineWord = {
   text: string
+  // Lyric word index, or for an instrumental the chord's index within one
+  // pass of the run (so it lines up with the chords as written).
   wordIndex: number
   start: number
   end: number
+  // Instrumentals only.
+  bar?: number // 0-based bar within the run
+  pass?: number // 0-based repeat
 }
 
 export type TimelineLine = {
   lineStart: number
   lineEnd: number
   words: TimelineWord[]
+  // Instrumentals only.
+  bars?: number // bars per pass
+  passes?: number
+  barDuration?: number
 } | null
 
 export type Timeline = {
@@ -55,20 +65,33 @@ function distributeByLength(
   })
 }
 
-// Spaces tokens evenly across [start, end) -- used for a chords-only line,
-// where a chord's length has nothing to do with how long it's held.
-function distributeEvenly(
-  tokens: string[],
+// One bar per chord group, each bar split evenly between the group's
+// chords, the whole run repeated `passes` times.
+function distributeBars(
+  groups: string[][],
   start: number,
-  end: number,
+  barDuration: number,
+  passes: number,
 ): TimelineWord[] {
-  const span = end - start
-  return tokens.map((text, i) => ({
-    text,
-    wordIndex: i,
-    start: start + (i / tokens.length) * span,
-    end: start + ((i + 1) / tokens.length) * span,
-  }))
+  const words: TimelineWord[] = []
+  for (let pass = 0; pass < passes; pass++) {
+    let wordIndex = 0
+    groups.forEach((group, g) => {
+      const barStart = start + (pass * groups.length + g) * barDuration
+      const each = barDuration / group.length
+      group.forEach((text, k) => {
+        words.push({
+          text,
+          wordIndex: wordIndex++,
+          start: barStart + k * each,
+          end: barStart + (k + 1) * each,
+          bar: g,
+          pass,
+        })
+      })
+    })
+  }
+  return words
 }
 
 export function buildTimeline(
@@ -85,24 +108,33 @@ export function buildTimeline(
   const lines: TimelineLine[] = blocks.map((block) => {
     if (block.type !== "pair") return null
 
-    const bars = block.bars && block.bars > 0 ? block.bars : 1
     const lineStart = t
-    const lineEnd = t + lineDuration * bars
     const lyrics = block.lyrics || ""
     const wordMatches = [...lyrics.matchAll(/\S+/g)].map((m) => m[0])
 
-    let words: TimelineWord[]
-    if (wordMatches.length) {
-      words = distributeByLength(wordMatches, lineStart, lineEnd)
-    } else if (block.chords) {
-      const chordTokens = block.chords.trim().split(/\s+/).filter(Boolean)
-      words = distributeEvenly(chordTokens, lineStart, lineEnd)
-    } else {
-      words = []
+    if (wordMatches.length || !block.chords) {
+      const lineEnd = t + lineDuration
+      t = lineEnd
+      return {
+        lineStart,
+        lineEnd,
+        words: distributeByLength(wordMatches, lineStart, lineEnd),
+      }
     }
 
+    const groups = chordGroups(block.chords)
+    const bars = Math.max(1, groups.length)
+    const passes = block.times && block.times > 0 ? block.times : 1
+    const lineEnd = t + lineDuration * bars * passes
     t = lineEnd
-    return { lineStart, lineEnd, words }
+    return {
+      lineStart,
+      lineEnd,
+      words: distributeBars(groups, lineStart, lineDuration, passes),
+      bars,
+      passes,
+      barDuration: lineDuration,
+    }
   })
 
   return { lines, totalDuration: t }
@@ -147,4 +179,29 @@ export function findActive(
     }
   }
   return { blockIndex: -1, wordIndex: -1 }
+}
+
+export interface TempoSetting {
+  bpm: number
+  beatsPerLine: number
+}
+
+// Changing the tempo mid-song must keep the song where it is -- otherwise
+// the highlight leaps ahead or back to wherever the same number of seconds
+// lands at the new speed. Every timeline here is measured in musical time
+// (the count-in in beats, the song in lines of `beatsPerLine` beats), so
+// the elapsed clock simply scales by how much those got longer or shorter.
+// Mirrors LiveSession.rescale_elapsed on the server.
+export function rescaleElapsed(
+  elapsed: number,
+  from: TempoSetting,
+  to: TempoSetting,
+): number {
+  const fromBpm = from.bpm > 0 ? from.bpm : 100
+  const toBpm = to.bpm > 0 ? to.bpm : 100
+  const beatRatio = fromBpm / toBpm
+  if (elapsed < 0) return elapsed * beatRatio
+  const fromBpl = from.beatsPerLine > 0 ? from.beatsPerLine : 4
+  const toBpl = to.beatsPerLine > 0 ? to.beatsPerLine : 4
+  return elapsed * beatRatio * (toBpl / fromBpl)
 }

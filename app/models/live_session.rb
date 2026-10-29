@@ -26,10 +26,10 @@ class LiveSession < ApplicationRecord
   # Negative while the pre-song count-in cue is still running; 0 is the
   # instant the song itself starts, exactly like the tempo guide already
   # treats "before the first word" elsewhere in this app.
-  def elapsed_seconds
+  def elapsed_seconds(now = Time.current)
     return clock_offset unless playing? && clock_started_at
 
-    clock_offset + (Time.current - clock_started_at)
+    clock_offset + (now - clock_started_at)
   end
 
   # How long the count-in cue lasts, in seconds, at the session's current
@@ -64,11 +64,49 @@ class LiveSession < ApplicationRecord
     update!(current_index: index, clock_offset: -count_in_seconds, clock_started_at: playing? ? Time.current : nil)
   end
 
+  BPM_RANGE = (20..300)
+  BEATS_PER_LINE_RANGE = (1..16)
+
+  # Safe to call mid-song: the clock is rescaled so everyone stays at the
+  # same spot in the song, just moving faster or slower from there (see
+  # rescale_elapsed). The tempo guide's timeline is musical time -- the
+  # count-in in beats, the song in lines of beats_per_line beats -- so
+  # without this, a tempo change would make every screen jump to wherever
+  # the same number of seconds lands at the new speed.
   def set_tempo!(bpm: nil, beats_per_line: nil)
-    changes = {}
-    changes[:bpm] = bpm.to_i if bpm.present? && bpm.to_i > 0
-    changes[:beats_per_line] = beats_per_line.to_i if beats_per_line.present? && beats_per_line.to_i > 0
-    update!(changes) if changes.any?
+    new_bpm = bpm.present? && bpm.to_i.positive? ? bpm.to_i.clamp(BPM_RANGE) : self.bpm
+    new_bpl =
+      if beats_per_line.present? && beats_per_line.to_i.positive?
+        beats_per_line.to_i.clamp(BEATS_PER_LINE_RANGE)
+      else
+        self.beats_per_line
+      end
+    return if new_bpm == self.bpm && new_bpl == self.beats_per_line
+
+    now = Time.current
+    rescaled = self.class.rescale_elapsed(
+      elapsed_seconds(now),
+      from_bpm: self.bpm, to_bpm: new_bpm,
+      from_beats_per_line: self.beats_per_line, to_beats_per_line: new_bpl
+    )
+    update!(
+      bpm: new_bpm,
+      beats_per_line: new_bpl,
+      clock_offset: rescaled,
+      clock_started_at: playing? ? now : nil
+    )
+  end
+
+  # Mirrors rescaleElapsed in app/javascript/lib/tempoGuide.ts.
+  def self.rescale_elapsed(elapsed, from_bpm:, to_bpm:, from_beats_per_line:, to_beats_per_line:)
+    from_bpm = from_bpm.to_i.positive? ? from_bpm.to_i : 100
+    to_bpm = to_bpm.to_i.positive? ? to_bpm.to_i : 100
+    beat_ratio = from_bpm.to_f / to_bpm
+    return elapsed * beat_ratio if elapsed.negative?
+
+    from_bpl = from_beats_per_line.to_i.positive? ? from_beats_per_line.to_i : 4
+    to_bpl = to_beats_per_line.to_i.positive? ? to_beats_per_line.to_i : 4
+    elapsed * beat_ratio * (to_bpl.to_f / from_bpl)
   end
 
   # Changes the count-in length for future restarts/song changes. Doesn't

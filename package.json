@@ -10,6 +10,7 @@
     "format:fix": "prettier --write 'app/javascript' '*.{js,mjs,cjs,ts}'"
   },
   "dependencies": {
+    "@fontsource/montserrat": "^5.3.0",
     "@inertiajs/vue3": "^3.6.1",
     "@lucide/vue": "^1.26.0",
     "@rails/actioncable": "^7.2.302",

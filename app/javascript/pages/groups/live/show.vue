@@ -1,14 +1,43 @@
 <script setup lang="ts">
-import { Head, Link, router, usePage } from "@inertiajs/vue3"
+import { Head, router, usePage } from "@inertiajs/vue3"
 import type { Subscription } from "@rails/actioncable"
+import { useDebounceFn, useFullscreen } from "@vueuse/core"
+import {
+  CircleStop,
+  Guitar,
+  LogOut,
+  Maximize,
+  MicVocal,
+  Minimize,
+  Pause,
+  Play,
+  RotateCcw,
+  ScrollText,
+  Settings2,
+  SkipBack,
+  SkipForward,
+} from "lucide-vue-next"
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue"
 
 import SongBody from "@/components/karaoke/SongBody.vue"
-import TransposeControl from "@/components/karaoke/TransposeControl.vue"
-import { Button } from "@/components/ui/button"
+import LyricStage from "@/components/karaoke/tv/LyricStage.vue"
+import TvButton from "@/components/karaoke/tv/TvButton.vue"
+import TvPanel from "@/components/karaoke/tv/TvPanel.vue"
+import TvShell from "@/components/karaoke/tv/TvShell.vue"
+import TvStepper from "@/components/karaoke/tv/TvStepper.vue"
+import { isButtonTarget, isTypingTarget } from "@/composables/useTv"
 import { getConsumer } from "@/lib/cable"
 import { parseBody } from "@/lib/chordSheet"
+import { fromChordSheet } from "@/lib/lyricDisplay"
 import { buildTimeline, findActive } from "@/lib/tempoGuide"
+import { transposeToken } from "@/lib/transpose"
+import {
+  LYRIC_SCALE,
+  SHEET_SCALE,
+  signed,
+  stepValue,
+  useTvPrefs,
+} from "@/lib/tvPrefs"
 import {
   groups as groupsRoutes,
   liveSession as liveSessionRoutes,
@@ -40,22 +69,15 @@ const blocks = computed(() =>
   currentSong.value ? parseBody(currentSong.value.body ?? "") : [],
 )
 
-/* ---- personal, per-device only: transpose + text size ---- */
+/* ---- personal, per-device only: key, text size, view ---- */
+const { view, lyricScale, sheetScale, showChords } = useTvPrefs()
 const semitones = ref(0)
 const preferFlat = ref(false)
-const fontScale = ref(
-  Number(localStorage.getItem("chordstage:fontscale")) || 1.6,
-)
-watch(fontScale, (v) => {
-  try {
-    localStorage.setItem("chordstage:fontscale", String(v))
-  } catch {
-    /* ignore */
-  }
-})
+const settingsOpen = ref(false)
 
 /* ---- shared clock: always derived from the leader's absolute timestamp,
-   so a dropped frame never lets a device drift out of sync ---- */
+   so a dropped frame never lets a device drift out of sync. Negative
+   while the count-in runs. ---- */
 function computeElapsed(s: LiveSessionState): number {
   if (!s.playing || !s.clock_started_at) return s.clock_offset
   return (
@@ -70,40 +92,43 @@ function frame() {
   tick.value = (tick.value + 1) % 1_000_000
   rafId = requestAnimationFrame(frame)
 }
-
 const elapsed = computed(() => {
   void tick.value
   return computeElapsed(state.value)
 })
+
+const track = computed(() =>
+  fromChordSheet(blocks.value, {
+    bpm: state.value.bpm,
+    beatsPerLine: state.value.beats_per_line,
+    countInBeats: state.value.count_in_beats,
+    semitones: semitones.value,
+    preferFlat: preferFlat.value,
+  }),
+)
 const timeline = computed(() =>
   buildTimeline(blocks.value, state.value.bpm, state.value.beats_per_line),
 )
-const active = computed(() =>
+const sheetActive = computed(() =>
   findActive(timeline.value.lines, elapsed.value, timeline.value.totalDuration),
 )
-const activeBlockIndex = computed(() => active.value.blockIndex)
-const activeWordIndex = computed(() => active.value.wordIndex)
 
-/* ---- count-in cue: elapsed < 0 means the song hasn't started yet, so we
-   show a beat-synced countdown spinner instead of the lyrics ---- */
-const COUNT_IN_CIRCUMFERENCE = 2 * Math.PI * 70
-
-const secPerBeat = computed(
-  () => 60 / (state.value.bpm > 0 ? state.value.bpm : 100),
-)
-const countInSeconds = computed(
-  () => state.value.count_in_beats * secPerBeat.value,
-)
-const isCountingIn = computed(
-  () => countInSeconds.value > 0 && elapsed.value < 0,
-)
-const countInRemainingBeats = computed(() =>
-  Math.max(1, Math.ceil(-elapsed.value / secPerBeat.value)),
-)
-const countInProgress = computed(() => {
-  const total = countInSeconds.value
-  if (total <= 0) return 1
-  return Math.min(1, Math.max(0, (total + elapsed.value) / total))
+const stageHint = computed(() => {
+  if (state.value.playing) return null
+  return isLeader.value
+    ? "Press ▶ Play to start for everyone"
+    : `Waiting for ${state.value.leader_name}…`
+})
+const statusText = computed(() => {
+  const who = isLeader.value
+    ? "You're leading"
+    : `Following ${state.value.leader_name}`
+  const parts = [`Live · ${who}`]
+  if (props.songs.length > 1) {
+    parts.push(`${state.value.current_index + 1}/${props.songs.length}`)
+  }
+  parts.push(`${state.value.bpm} BPM`)
+  return parts.join(" · ")
 })
 
 /* ---- leader controls ---- */
@@ -115,32 +140,151 @@ function sendCommand(command: string, extra: Record<string, unknown> = {}) {
   )
 }
 function togglePlay() {
-  sendCommand(state.value.playing ? "pause" : "play")
+  if (isLeader.value) sendCommand(state.value.playing ? "pause" : "play")
 }
 function restart() {
-  sendCommand("restart")
+  if (isLeader.value) sendCommand("restart")
 }
 function seekTo(index: number) {
+  if (!isLeader.value || index < 0 || index >= props.songs.length) return
   sendCommand("seek_index", { index })
 }
-function onBpmChange(event: Event) {
-  const bpm = Number((event.target as HTMLInputElement).value)
-  sendCommand("set_tempo", { bpm, beats_per_line: state.value.beats_per_line })
+function setTempo(bpm: number, beatsPerLine: number) {
+  sendCommand("set_tempo", { bpm, beats_per_line: beatsPerLine })
 }
-function onBeatsChange(event: Event) {
-  const beatsPerLine = Number((event.target as HTMLInputElement).value)
-  sendCommand("set_tempo", {
-    bpm: state.value.bpm,
-    beats_per_line: beatsPerLine,
-  })
+
+// The leader's Tempo control, usable mid-song: the server rescales the
+// shared clock so everyone stays on the same word, just moving faster or
+// slower from there. A few quick presses on a remote are shown right away
+// and sent as one change once they stop.
+const BPM_RANGE = { min: 40, max: 240, step: 2 }
+const pendingBpm = ref<number | null>(null)
+const shownBpm = computed(() => pendingBpm.value ?? state.value.bpm)
+let pendingTimer: ReturnType<typeof setTimeout> | null = null
+const sendBpm = useDebounceFn((bpm: number) => {
+  setTempo(bpm, state.value.beats_per_line)
+  // If the change never comes back (a failed request), stop showing it.
+  if (pendingTimer) clearTimeout(pendingTimer)
+  pendingTimer = setTimeout(() => (pendingBpm.value = null), 4000)
+}, 350)
+function nudgeTempo(dir: 1 | -1) {
+  if (!isLeader.value) return
+  const next = Math.min(
+    BPM_RANGE.max,
+    Math.max(BPM_RANGE.min, shownBpm.value + dir * BPM_RANGE.step),
+  )
+  if (next === shownBpm.value) return
+  pendingBpm.value = next
+  void sendBpm(next)
 }
-function onCountInChange(event: Event) {
-  const beats = Number((event.target as HTMLInputElement).value)
+watch(
+  () => state.value.bpm,
+  (bpm) => {
+    if (pendingBpm.value === bpm) pendingBpm.value = null
+  },
+)
+function setCountIn(beats: number) {
   sendCommand("set_count_in", { beats })
 }
 function endSession() {
   if (confirm("End this live session for everyone in the group?")) {
     router.delete(liveSessionRoutes.destroy({ group_id: props.group.slug }).url)
+  }
+}
+function exit() {
+  router.visit(groupsRoutes.show(props.group.slug))
+}
+
+/* ---- key / size / view (personal) ---- */
+const KEY_RANGE = 6
+const keyLabel = computed(() => {
+  const st = semitones.value
+  const songKey = currentSong.value?.key
+  if (songKey) {
+    const k = transposeToken(songKey, st, preferFlat.value)
+    return st ? `${k} (${signed(st)})` : k
+  }
+  return st ? signed(st) : "Orig"
+})
+function shiftKey(dir: 1 | -1) {
+  semitones.value = Math.max(
+    -KEY_RANGE,
+    Math.min(KEY_RANGE, semitones.value + dir),
+  )
+}
+const sizeValue = computed(() =>
+  view.value === "karaoke" ? lyricScale.value : sheetScale.value,
+)
+const sizeRange = computed(() =>
+  view.value === "karaoke" ? LYRIC_SCALE : SHEET_SCALE,
+)
+function resize(dir: 1 | -1) {
+  if (view.value === "karaoke") {
+    lyricScale.value = stepValue(lyricScale.value, dir, LYRIC_SCALE)
+  } else {
+    sheetScale.value = stepValue(sheetScale.value, dir, SHEET_SCALE)
+  }
+}
+function toggleView() {
+  view.value = view.value === "karaoke" ? "sheet" : "karaoke"
+}
+
+const fullscreen = useFullscreen()
+
+function onKeydown(e: KeyboardEvent) {
+  if (e.defaultPrevented || settingsOpen.value || isTypingTarget(e)) return
+  if (e.ctrlKey || e.metaKey || e.altKey) return
+  switch (e.key) {
+    case " ":
+      if (isButtonTarget(e)) return
+      e.preventDefault()
+      return togglePlay()
+    case "p":
+    case "P":
+    case "MediaPlayPause":
+      return togglePlay()
+    case "r":
+    case "R":
+    case "Home":
+      return restart()
+    case "n":
+    case "N":
+    case "PageDown":
+    case "MediaTrackNext":
+      e.preventDefault()
+      return seekTo(state.value.current_index + 1)
+    case "PageUp":
+    case "MediaTrackPrevious":
+      e.preventDefault()
+      return seekTo(state.value.current_index - 1)
+    case "+":
+    case "=":
+      return resize(1)
+    case "-":
+    case "_":
+      return resize(-1)
+    case "]":
+      return shiftKey(1)
+    case "[":
+      return shiftKey(-1)
+    case ",":
+    case "<":
+      return nudgeTempo(-1)
+    case ".":
+    case ">":
+      return nudgeTempo(1)
+    case "k":
+    case "K":
+    case "v":
+    case "V":
+      return toggleView()
+    case "c":
+    case "C":
+      showChords.value = !showChords.value
+      return
+    case "f":
+    case "F":
+      return void fullscreen.toggle()
   }
 }
 
@@ -152,6 +296,7 @@ let subscription: Subscription | null = null
 
 onMounted(() => {
   rafId = requestAnimationFrame(frame)
+  window.addEventListener("keydown", onKeydown)
 
   subscription = getConsumer().subscriptions.create(
     { channel: "GroupLiveChannel", group_id: props.group.id },
@@ -171,7 +316,9 @@ onMounted(() => {
   )
 })
 onBeforeUnmount(() => {
+  if (pendingTimer) clearTimeout(pendingTimer)
   if (rafId) cancelAnimationFrame(rafId)
+  window.removeEventListener("keydown", onKeydown)
   subscription?.unsubscribe()
 })
 </script>
@@ -179,214 +326,222 @@ onBeforeUnmount(() => {
 <template>
   <Head :title="currentSong ? `Live — ${currentSong.title}` : 'Live session'" />
 
-  <div class="bg-background fixed inset-0 z-50 flex flex-col">
-    <div
-      v-if="!currentSong"
-      class="flex flex-1 flex-col items-center justify-center gap-3"
-    >
-      <p class="text-muted-foreground">
-        This live session has no playable songs left.
-      </p>
-      <Link :href="groupsRoutes.show(group.slug)">
-        <Button variant="outline">Back to {{ group.name }}</Button>
-      </Link>
+  <TvShell
+    :title="currentSong?.title ?? group.name"
+    :subtitle="currentSong?.artist"
+    :status="statusText"
+    :playing="state.playing"
+    :panel-open="settingsOpen"
+  >
+    <div v-if="!currentSong" class="live-empty">
+      <p>This live session has no playable songs left.</p>
     </div>
+
     <template v-else>
-      <div class="bg-card flex flex-wrap items-center gap-3 border-b px-4 py-2">
-        <Link :href="groupsRoutes.show(group.slug)">
-          <Button variant="outline">Exit</Button>
-        </Link>
-        <div class="min-w-[10rem] flex-1 font-semibold">
-          {{ currentSong.title }}
-          <span
-            v-if="currentSong.artist"
-            class="text-muted-foreground font-normal"
-          >
-            &mdash; {{ currentSong.artist }}
-          </span>
-        </div>
-        <div class="flex flex-wrap items-center gap-2">
-          <template v-if="songs.length > 1">
-            <Button
-              variant="outline"
-              size="sm"
-              :disabled="!isLeader || state.current_index === 0"
-              @click="seekTo(state.current_index - 1)"
-            >
-              &#9664; Prev
-            </Button>
-            <span class="text-sm font-semibold">
-              {{ state.current_index + 1 }}/{{ songs.length }}
-            </span>
-            <Button
-              variant="outline"
-              size="sm"
-              :disabled="!isLeader || state.current_index === songs.length - 1"
-              @click="seekTo(state.current_index + 1)"
-            >
-              Next &#9654;
-            </Button>
-          </template>
-          <TransposeControl
-            v-model:semitones="semitones"
-            v-model:preferFlat="preferFlat"
-          />
-          <label
-            class="text-muted-foreground flex items-center gap-1.5 text-xs"
-          >
-            A
-            <input
-              type="range"
-              min="0.8"
-              max="3"
-              step="0.1"
-              v-model.number="fontScale"
-            />
-            A
-          </label>
-        </div>
-      </div>
-
-      <div
-        v-if="isLeader"
-        class="bg-muted/40 flex flex-wrap items-center gap-3 border-b px-4 py-2 text-sm"
-      >
-        <Button size="sm" @click="togglePlay">
-          {{ state.playing ? "Pause" : "Play" }}
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          title="Back to the start"
-          @click="restart"
-        >
-          Restart
-        </Button>
-        <label class="text-muted-foreground flex items-center gap-1.5">
-          BPM
-          <input
-            type="number"
-            min="20"
-            max="300"
-            :value="state.bpm"
-            @change="onBpmChange"
-            class="bg-background w-16 rounded border px-1.5 py-0.5"
-          />
-        </label>
-        <label class="text-muted-foreground flex items-center gap-1.5">
-          Beats/line
-          <input
-            type="number"
-            min="1"
-            max="8"
-            :value="state.beats_per_line"
-            @change="onBeatsChange"
-            class="bg-background w-14 rounded border px-1.5 py-0.5"
-          />
-        </label>
-        <label
-          class="text-muted-foreground flex items-center gap-1.5"
-          title="Count-in beats before each song starts"
-        >
-          Count-in
-          <input
-            type="number"
-            min="0"
-            max="16"
-            :value="state.count_in_beats"
-            @change="onCountInChange"
-            class="bg-background w-14 rounded border px-1.5 py-0.5"
-          />
-        </label>
-        <span class="text-muted-foreground text-xs">
-          You're leading &mdash; everyone else's app follows this automatically.
-        </span>
-        <Button
-          variant="destructive"
-          size="sm"
-          class="ml-auto"
-          @click="endSession"
-        >
-          End session
-        </Button>
-      </div>
-      <div
-        v-else
-        class="bg-muted/40 flex flex-wrap items-center gap-3 border-b px-4 py-2 text-sm"
-      >
-        <span class="text-muted-foreground">
-          Following {{ state.leader_name }}'s live session &mdash;
-          {{ state.playing ? "playing" : "paused" }}.
-        </span>
-      </div>
-
-      <div class="relative flex-1 overflow-hidden">
-        <div class="h-full overflow-y-auto px-8 pt-6 pb-16">
-          <SongBody
-            :blocks="blocks"
-            :semitones="semitones"
-            :prefer-flat="preferFlat"
-            :font-scale="fontScale"
-            :active-block-index="activeBlockIndex"
-            :active-word-index="activeWordIndex"
-          />
-        </div>
-
-        <!-- Transparent countdown modal: the song underneath is already
-             rendered and correctly highlighted, so when this fades out the
-             transition into the song is seamless rather than a hard swap. -->
-        <Transition
-          enter-active-class="transition-opacity duration-300 ease-in-out"
-          enter-from-class="opacity-0"
-          leave-active-class="transition-opacity duration-300 ease-in-out"
-          leave-to-class="opacity-0"
-        >
-          <div
-            v-if="isCountingIn"
-            class="bg-background/60 absolute inset-0 flex flex-col items-center justify-center gap-4 backdrop-blur-sm"
-          >
-            <div class="relative flex h-40 w-40 items-center justify-center">
-              <svg
-                width="160"
-                height="160"
-                viewBox="0 0 160 160"
-                class="-rotate-90"
-              >
-                <circle
-                  cx="80"
-                  cy="80"
-                  r="70"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="10"
-                  class="text-muted-foreground/20"
-                />
-                <circle
-                  cx="80"
-                  cy="80"
-                  r="70"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="10"
-                  stroke-linecap="round"
-                  class="text-primary"
-                  :stroke-dasharray="COUNT_IN_CIRCUMFERENCE"
-                  :stroke-dashoffset="
-                    COUNT_IN_CIRCUMFERENCE * (1 - countInProgress)
-                  "
-                />
-              </svg>
-              <div class="absolute text-5xl font-bold tabular-nums">
-                {{ countInRemainingBeats }}
-              </div>
-            </div>
-            <p class="text-muted-foreground text-sm">
-              Get ready&hellip; {{ currentSong.title }} starts in
-              {{ countInRemainingBeats }}
-            </p>
-          </div>
-        </Transition>
+      <LyricStage
+        v-if="view === 'karaoke'"
+        :track="track"
+        :time="elapsed"
+        :scale="lyricScale"
+        :show-chords="showChords"
+        :title="currentSong.title"
+        :artist="currentSong.artist"
+        :hint="stageHint"
+      />
+      <div v-else class="live-sheet">
+        <SongBody
+          tv
+          :blocks="blocks"
+          :semitones="semitones"
+          :prefer-flat="preferFlat"
+          :font-scale="sheetScale"
+          :active-block-index="sheetActive.blockIndex"
+          :active-word-index="sheetActive.wordIndex"
+        />
       </div>
     </template>
-  </div>
+
+    <template #dock>
+      <div class="tv-dock-group">
+        <TvButton :icon="LogOut" label="Exit" @click="exit" />
+      </div>
+      <div v-if="isLeader && currentSong" class="tv-dock-group">
+        <TvButton
+          v-if="songs.length > 1"
+          :icon="SkipBack"
+          label="Prev"
+          title="Previous song (Page Up)"
+          :disabled="state.current_index === 0"
+          @click="seekTo(state.current_index - 1)"
+        />
+        <TvButton :icon="RotateCcw" label="Restart" @click="restart" />
+        <TvButton
+          primary
+          :icon="state.playing ? Pause : Play"
+          :label="state.playing ? 'Pause' : 'Play'"
+          @click="togglePlay"
+        />
+        <TvButton
+          v-if="songs.length > 1"
+          :icon="SkipForward"
+          label="Next"
+          title="Next song (N / Page Down)"
+          :disabled="state.current_index === songs.length - 1"
+          @click="seekTo(state.current_index + 1)"
+        />
+      </div>
+      <div v-if="currentSong" class="tv-dock-group">
+        <TvStepper
+          label="Key"
+          :value="keyLabel"
+          dec-label="Key down"
+          inc-label="Key up"
+          title="Transposes the chords on this screen only"
+          :can-dec="semitones > -KEY_RANGE"
+          :can-inc="semitones < KEY_RANGE"
+          @dec="shiftKey(-1)"
+          @inc="shiftKey(1)"
+        />
+      </div>
+      <div v-if="isLeader && currentSong" class="tv-dock-group">
+        <TvStepper
+          label="Tempo"
+          :value="String(shownBpm)"
+          unit="bpm"
+          dec-label="Slower"
+          inc-label="Faster"
+          :can-dec="shownBpm > BPM_RANGE.min"
+          :can-inc="shownBpm < BPM_RANGE.max"
+          title="Tempo for everyone, adjustable mid-song without losing your place (, and .)"
+          @dec="nudgeTempo(-1)"
+          @inc="nudgeTempo(1)"
+        />
+      </div>
+      <div v-if="currentSong" class="tv-dock-group">
+        <TvStepper
+          label="Text"
+          :value="`${Math.round(sizeValue * 100)}%`"
+          dec-label="Smaller text"
+          inc-label="Bigger text"
+          :can-dec="sizeValue > sizeRange.min"
+          :can-inc="sizeValue < sizeRange.max"
+          @dec="resize(-1)"
+          @inc="resize(1)"
+        />
+      </div>
+      <div v-if="currentSong" class="tv-dock-group">
+        <TvButton
+          :icon="view === 'karaoke' ? ScrollText : MicVocal"
+          :label="view === 'karaoke' ? 'Sheet' : 'Karaoke'"
+          :title="
+            view === 'karaoke'
+              ? 'Show the full chord sheet'
+              : 'Back to karaoke lyrics'
+          "
+          @click="toggleView"
+        />
+        <TvButton
+          v-if="view === 'karaoke'"
+          :icon="Guitar"
+          label="Chords"
+          toggle
+          :active="showChords"
+          @click="showChords = !showChords"
+        />
+        <TvButton
+          :icon="Settings2"
+          label="Settings"
+          @click="settingsOpen = true"
+        />
+      </div>
+    </template>
+
+    <template #panel>
+      <TvPanel title="Live session settings" @close="settingsOpen = false">
+        <template v-if="isLeader">
+          <TvStepper
+            label="Tempo"
+            :value="`${shownBpm} BPM`"
+            dec-label="Slower"
+            inc-label="Faster"
+            :can-dec="shownBpm > BPM_RANGE.min"
+            :can-inc="shownBpm < BPM_RANGE.max"
+            @dec="nudgeTempo(-1)"
+            @inc="nudgeTempo(1)"
+          />
+          <TvStepper
+            label="Beats / line"
+            :value="String(state.beats_per_line)"
+            dec-label="Fewer"
+            inc-label="More"
+            :can-dec="state.beats_per_line > 1"
+            :can-inc="state.beats_per_line < 8"
+            @dec="setTempo(state.bpm, Math.max(1, state.beats_per_line - 1))"
+            @inc="setTempo(state.bpm, Math.min(8, state.beats_per_line + 1))"
+          />
+          <TvStepper
+            label="Count-in"
+            :value="
+              state.count_in_beats ? `${state.count_in_beats} beats` : 'Off'
+            "
+            dec-label="Fewer"
+            inc-label="More"
+            :can-dec="state.count_in_beats > 0"
+            :can-inc="state.count_in_beats < 16"
+            @dec="setCountIn(Math.max(0, state.count_in_beats - 1))"
+            @inc="setCountIn(Math.min(16, state.count_in_beats + 1))"
+          />
+          <TvButton
+            :icon="CircleStop"
+            label="End session"
+            title="End the live session for everyone"
+            @click="endSession"
+          />
+        </template>
+        <p v-else class="settings-note">
+          {{ state.leader_name }} sets the tempo and count-in for everyone. Key,
+          text size, and view are just for this screen.
+        </p>
+        <TvButton
+          v-if="fullscreen.isSupported.value"
+          :icon="fullscreen.isFullscreen.value ? Minimize : Maximize"
+          :label="
+            fullscreen.isFullscreen.value ? 'Exit full screen' : 'Full screen'
+          "
+          title="Full screen (F)"
+          @click="fullscreen.toggle()"
+        />
+        <TvButton
+          label="Use flats (B♭)"
+          toggle
+          :active="preferFlat"
+          @click="preferFlat = !preferFlat"
+        />
+      </TvPanel>
+    </template>
+  </TvShell>
 </template>
+
+<style scoped>
+.live-empty {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  color: var(--tv-dim);
+  font-size: max(20px, 3.6vh);
+  font-weight: 900;
+  text-align: center;
+}
+.live-sheet {
+  height: 100%;
+  overflow-y: auto;
+  padding: 2vh 4vw 6vh;
+  font-size: max(16px, 3.4vh);
+}
+.settings-note {
+  max-width: 60vh;
+  color: var(--tv-dim);
+  font-size: max(16px, 2.4vh);
+  font-weight: 700;
+}
+</style>

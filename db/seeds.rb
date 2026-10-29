@@ -26,7 +26,7 @@ samples = [
     tempo: 80,
     body: <<~CHORD
       [Intro]
-      G   G7   C   G   x4
+      G   G7   C   G
 
       [Verse 1]
       G              G7           C        G

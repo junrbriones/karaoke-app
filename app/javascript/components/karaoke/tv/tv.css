@@ -1,0 +1,55 @@
+/*
+ * TV / kiosk theme for the singer-facing views (Stage Mode, Live Sync, the
+ * phrasing editor's preview). Built to be read on a ~70" screen from 10-20
+ * feet away:
+ *
+ * - Pure black background, whatever the app's light/dark setting, so a TV
+ *   in a dim room doesn't glow and nothing competes with the words.
+ * - Solid white lyrics swept to neon cyan as they're sung (17:1 / 13.6:1
+ *   on black). Duet parts swap the sweep color -- Male cyan, Female
+ *   magenta (7.2:1), All lime (17:1) -- so each singer can see at a
+ *   glance whose line it is. Chords are neon yellow (16.6:1).
+ * - Montserrat Black, self-hosted (works offline on a kiosk), falling back
+ *   to Arial Black.
+ * - Sizes are in viewport/container units so a 4K panel gets the same
+ *   physical letter size as a 1080p one instead of tinier text.
+ */
+.tv-theme {
+  --tv-bg: #000;
+  --tv-ink: #fff;
+  --tv-dim: rgb(255 255 255 / 0.55);
+  --tv-faint: rgb(255 255 255 / 0.16);
+  --tv-sung: #00e5ff;
+  --tv-sung-glow: rgb(0 229 255 / 0.45);
+  --tv-male: #00e5ff;
+  --tv-male-glow: rgb(0 229 255 / 0.45);
+  --tv-female: #ff3df2;
+  --tv-female-glow: rgb(255 61 242 / 0.45);
+  --tv-all: #b4ff1f;
+  --tv-all-glow: rgb(180 255 31 / 0.4);
+  --tv-chord: #ffe600;
+  --tv-focus: #ffe600;
+  --tv-font:
+    "Montserrat", "Arial Black", "Arial Bold", Gadget, "Helvetica Neue", Arial,
+    sans-serif;
+
+  background: var(--tv-bg);
+  color: var(--tv-ink);
+  font-family: var(--tv-font);
+  color-scheme: dark;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* Groups of buttons inside the control dock. */
+.tv-dock-group {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: max(6px, 0.8vh);
+  padding-inline: max(5px, 0.6vh);
+}
+.tv-dock-group + .tv-dock-group {
+  border-left: max(2px, 0.25vh) solid var(--tv-faint);
+}

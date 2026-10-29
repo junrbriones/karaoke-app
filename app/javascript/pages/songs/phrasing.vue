@@ -2,15 +2,15 @@
 import { Head, Link, router } from "@inertiajs/vue3"
 import { computed, onBeforeUnmount, onMounted, ref } from "vue"
 
-import PhrasingScreen from "@/components/karaoke/PhrasingScreen.vue"
+import LyricStage from "@/components/karaoke/tv/LyricStage.vue"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
+import { useMediaClock } from "@/composables/useMediaClock"
 import AppLayout from "@/layouts/AppLayout.vue"
 import { parseBody } from "@/lib/chordSheet"
+import { fromPhrasing } from "@/lib/lyricDisplay"
 import {
   type PhrasingScreen as PhrasingScreenData,
-  computeScreenWindows,
-  findActiveScreenIndex,
   flattenTokens,
   isComplete,
   lintScreens,
@@ -76,20 +76,18 @@ const nextTokenText = computed(() => {
 
 /* ---- audio + playback time ---- */
 const audioPlayer = ref<HTMLAudioElement | null>(null)
-const currentTime = ref(0)
-function onTimeUpdate() {
-  if (audioPlayer.value) currentTime.value = audioPlayer.value.currentTime
-}
+// Read every frame while playing, so the preview's sweep is as smooth as
+// it'll be on the TV.
+const { time: currentTime } = useMediaClock(audioPlayer)
 
-const windows = computed(() => computeScreenWindows(screens.value))
-const activeScreenIndex = computed(() =>
-  findActiveScreenIndex(windows.value, currentTime.value),
-)
-const activeScreen = computed(() =>
-  activeScreenIndex.value >= 0 ? screens.value[activeScreenIndex.value] : null,
-)
-const activeWindow = computed(() =>
-  activeScreenIndex.value >= 0 ? windows.value[activeScreenIndex.value] : null,
+// The practice screen is the real Stage Mode renderer in a 16:9 box --
+// what you see here is exactly what the singer will see on the TV.
+const previewTrack = computed(() =>
+  fromPhrasing({
+    sourceText: sourceText.value,
+    complete: complete.value,
+    screens: screens.value,
+  }),
 )
 
 /* ---- recording (spacebar tap) ---- */
@@ -247,7 +245,6 @@ function formatTime(t: number | null): string {
           :src="song.audio_url"
           controls
           class="w-full"
-          @timeupdate="onTimeUpdate"
         ></audio>
         <p v-else class="text-muted-foreground mb-2 text-sm">
           Upload the song's audio to start tapping out a sync.
@@ -281,11 +278,16 @@ function formatTime(t: number | null): string {
             >{{ tappedCount }}/{{ tokenRefs.length }} words tapped</span
           >
         </div>
-        <PhrasingScreen
-          :screen="activeScreen"
-          :window="activeWindow"
-          :current-time="currentTime"
-        />
+        <div
+          class="aspect-video w-full overflow-hidden rounded-lg bg-black shadow-inner"
+        >
+          <LyricStage
+            :track="previewTrack"
+            :time="currentTime"
+            :title="song.title"
+            :artist="song.artist"
+          />
+        </div>
         <div class="mt-3 flex flex-wrap items-center gap-2">
           <Button
             size="sm"

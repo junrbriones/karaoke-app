@@ -64,6 +64,9 @@ export function transposeRoot(
   return preferFlat ? FLAT_NAMES[newIdx] : SHARP_NAMES[newIdx]
 }
 
+// Transposes every chord in a chord-line token: a plain chord ("Am7"), a
+// slash chord ("D/F#"), or a dash-joined run ("Dm-G7sus-G7-"). Anything
+// that isn't a note name (extensions, "N.C.", bar lines) is left alone.
 export function transposeToken(
   token: string,
   semitones: number,
@@ -71,32 +74,34 @@ export function transposeToken(
 ): string {
   if (!semitones) return token
   return token
-    .split("/")
+    .split(/([-–/()])/)
     .map((part) => {
       const m = part.match(ROOT_REGEX)
       if (!m) return part
       const root = m[1]
-      const rest = part.slice(root.length)
-      return transposeRoot(root, semitones, preferFlat) + rest
+      return (
+        transposeRoot(root, semitones, preferFlat) + part.slice(root.length)
+      )
     })
-    .join("/")
+    .join("")
 }
 
+// Transposes a whole chord line, keeping every chord at its original column
+// (so it stays over the right syllable) even when a name gets longer or
+// shorter, e.g. C -> C#. A chord only shifts right when the one before it
+// grew into its spot, and then by just enough to keep a space between.
 export function transposeChordLine(
   line: string,
   semitones: number,
   preferFlat: boolean,
 ): string {
   if (!semitones) return line
-  const tokenRegex = /\S+/g
-  let result = ""
-  let lastIndex = 0
-  let match: RegExpExecArray | null
-  while ((match = tokenRegex.exec(line)) !== null) {
-    result += line.slice(lastIndex, match.index)
-    result += transposeToken(match[0], semitones, preferFlat)
-    lastIndex = match.index + match[0].length
+  let out = ""
+  for (const m of line.matchAll(/\S+/g)) {
+    const col = m.index ?? 0
+    if (out.length < col) out += " ".repeat(col - out.length)
+    else if (out.length > 0) out += " "
+    out += transposeToken(m[0], semitones, preferFlat)
   }
-  result += line.slice(lastIndex)
-  return result
+  return out
 }

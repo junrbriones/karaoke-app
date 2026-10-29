@@ -34,7 +34,9 @@ means the Vue/TypeScript frontend has, on every feature added so far, been
 fully installed, type-checked (`vue-tsc`, strict mode), linted (`eslint`),
 formatted (`prettier`), and production-built (`vite build`) with zero
 errors — all genuinely verified, including the `@rails/actioncable` client
-added for Live Sync. The Ruby side (models, migrations, controllers,
+added for Live Sync and the self-hosted `@fontsource/montserrat` font added
+for the TV display (whose screens were also rendered in headless Chromium
+at 1080p and 4K to check sizing, layout, and remote navigation). The Ruby side (models, migrations, controllers,
 routes, channels, and hand-edited `db/schema.rb`) is written carefully
 against the exact patterns already in this codebase and double-checked with
 `ruby -c` for syntax, but the agent's sandbox can't run `bundle install` or
@@ -76,37 +78,69 @@ pattern as `LiveSessionsController.ts`.
 
 A song's lyrics/chords live in one text field (`body`). A line made up only
 of chords is automatically paired with the lyric line right below it, so
-you can paste chord sheets copied from elsewhere:
+you can paste chord sheets copied from elsewhere. Put each chord over the
+syllable where it changes; indenting the lyrics is fine.
 
 ```
 [Verse 1]
-G              G7           C        G
-Amazing grace, how sweet the sound,
+     C         Em         F           Em
+   Tayo ay magsaya at iwanan ang problema
 ```
 
 - Wrap section names in brackets: `[Verse 1]`, `[Chorus]`, `[Bridge]`.
 - Blank lines are kept as spacers.
+- Chords can be anything a band would write: `Am`, `Bb`, `Cmaj7`, `Dm7`,
+  `Cm7b5`, `G7sus`, `Gsus4`, `Fadd9`, `C7(b9)`, `C6/9`, slash chords like
+  `D/F#`, and `N.C.`. Chords played within the same bar can be joined with
+  dashes: `Dm-G7sus-G7` (a trailing dash is fine too). Bar lines (`|`),
+  hold dashes (`Am - D7`), and similar markings are allowed in a chord
+  line without breaking it.
 - If a line is ever misread, force its type with a leading marker:
   `| G   D   C` forces a chord line, `> spoken intro` forces a lyric line.
+  The editor also lists any line that looks like chords but was read as
+  lyrics, naming the chord it didn't recognize.
 
-A chord line with nothing below it is instrumental &mdash; an intro, ad
-lib, solo, turnaround, etc. It renders as its own row of chords and, in
-Stage Mode, the tempo guide steps through those chords instead of going
-dark until the lyrics resume:
+**Instrumentals.** A chord line with nothing below it is instrumental
+&mdash; an intro, interlude, solo, turnaround. Each chord, or each
+dash-joined group, is one bar (the group's chords share the bar evenly), so
+this intro is three bars:
 
 ```
 [Intro]
-G   G7   C   G   x4
-
-[Verse 1]
-G              G7           C        G
-Amazing grace, how sweet the sound,
+   F Em Dm-G7sus-G7-
 ```
 
-By default an instrumental line takes up one bar, the same as any verse
-line, so it stays in step with the rest of the song automatically. For a
-longer passage, add `xN` after the chords to span N bars instead, as in
-the 4-bar intro above.
+Add `x2` (or `2x`) at the end of the line to play the run that many times.
+(This used to mean "make this line span N bars"; it now means "repeat it N
+times", which is how chord sheets use it &mdash; drop it from any older
+song where it was only there to stretch a line to one bar per chord.)
+
+In Stage Mode and Live Sync the tempo guide plays an instrumental at that
+pace, and the karaoke screen turns into a band chart for its length: one
+box per bar with the current bar outlined and the chord being played lit,
+a "Bar 2 of 3" counter, a beat light for each beat of the bar, a count-in
+before the first chord when the song starts with one, and the 4-3-2-1
+countdown to when the vocals come back in.
+
+**Repeats.** Don't retype a section that comes back. A section header that
+starts with `Repeat` plays an earlier section again:
+
+```
+[Repeat Refrain]
+[Repeat Chorus 1]
+[Repeat Interlude]
+[Repeat Chorus 2 2x, fade]
+```
+
+The name matches an earlier section (`[Repeat Chorus]` picks the most
+recent `Chorus ...`), `2x`/`x2`/`twice` sets how many times, and anything
+after a comma is a note shown with the section (`fade`). `Rpt`, `Ulit`, and
+`Ulitin` work in place of `Repeat`. Repeats are expanded when the song is
+read, so the song page, Stage Mode, Live Sync, and the phrasing editor all
+see the song as it's actually performed, with the repeated sections
+labeled "(repeat)". The song editor has a **Repeat** bar that inserts one
+for any section you've written, and it flags a repeat whose section it
+can't find.
 
 Title, artist, key, capo, and tempo are separate fields on the song, not
 part of that text.
@@ -184,29 +218,36 @@ member's own device &mdash; everyone's screen scrolls and highlights
 together during a rehearsal or a show, without anyone needing to be in the
 same room glued to one phone.
 
+Live Sync uses the same TV screen and controls as Stage Mode (see
+[Stage Mode](#stage-mode-the-tv--kiosk-display)).
+
 - **Starting one**: from a group's page, pick a song and click **Start live
   session**; from a setlist's page, click **Go Live with the group** to run
   the whole running order. Any member who can see the song(s) can start a
   session &mdash; whoever starts it becomes that session's leader.
 - **Leading vs. following**: the leader gets Play/Pause, Restart, Next/Prev
-  (for a multi-song session), BPM/beats-per-line, and End session. Everyone
+  (for a multi-song session), and Tempo -/+ in the control dock, and
+  beats-per-line, count-in, and End session under **Settings**. A tempo
+  change mid-song keeps everyone on the same word: the server rescales the
+  shared clock in musical time (`LiveSession#set_tempo!`), and a burst of
+  presses on a remote is sent as one change. Everyone
   else's app just follows &mdash; their word highlight, current song, and
   play/pause state track the leader's in real time. Only the leader (or the
   group owner, as a safety net if the leader's device drops off) can end the
   session; starting a new one automatically ends whatever was running
   before.
 - **What's shared vs. personal**: the tempo-guide clock and which song is
-  playing are shared. Transpose/key, text size, and manual scrolling stay
-  personal to each device &mdash; handy since a capo'd guitarist and a
+  playing are shared. Transpose/key, text size, karaoke vs. chord-sheet
+  view, and chords on/off stay personal to each device &mdash; handy since a capo'd guitarist and a
   singer often want different keys, and it means Live Sync only drives the
   same word-by-word highlight everyone already knows from Stage Mode's
   tempo guide, not a raw scroll position (which wouldn't line up across
   different text sizes anyway).
 - **Count-in cue**: before each song starts (on first play, on Restart, and
-  on every song change), everyone sees a beat-synced countdown spinner
-  instead of the lyrics &mdash; a shared "get ready" cue, like a drummer's
-  count-in, defaulting to 4 beats. The leader can change it with the
-  **Count-in** field (0 disables it). It's driven by the same shared clock
+  on every song change), everyone sees the same beat-synced countdown
+  &mdash; a progress bar and a big 4-3-2-1 &mdash; a shared "get ready"
+  cue, like a drummer's count-in, defaulting to 4 beats. The leader can
+  change it under **Settings** (0 disables it). It's driven by the same shared clock
   as everything else: the count-in is just the clock running through its
   negative seconds before the song's own timeline starts at zero, so
   pausing or resuming mid-countdown works exactly like pausing mid-song.
@@ -220,24 +261,109 @@ same room glued to one phone.
   production uses `solid_cable` (already in the `Gemfile`), so there's no
   Redis to install either.
 
-## Stage Mode
+## Stage Mode (the TV / kiosk display)
 
 Open a song and click **Stage Mode**, or star a few songs in the library
 (setlist songs are ordered alphabetically) and click **Start Stage Mode**
-to run through them in order.
+to run through them in order. Stage Mode &mdash; and Live Sync, which uses
+the same screen &mdash; is built to be read on a big TV (think 70" at
+10&ndash;20 feet), driven by a remote, an air-mouse, a keyboard, or touch.
 
-There's also a tempo guide: press **Play tempo guide** (or hit `P`) and a
-ball hops from word to word while the current word lights up, both paced by
-the song's BPM and a "beats per line" setting (4 by default, i.e. one bar
-in 4/4 — lower it for a waltz). It's a heuristic — spends `beatsPerLine`
-beats per lyric line and splits that time across the line's words by word
-length — not a frame-accurate sync to an audio track, but a steady visual
-metronome to keep a solo singer on tempo.
+**What's on screen.** A pure black background (whatever the app's
+light/dark setting) with at most two lines of lyrics, centered, in
+Montserrat Black (self-hosted, so it works on an offline kiosk; Arial
+Black is the fallback). Lyric size is set in container/viewport units
+rather than pixels, so a 4K panel shows the same physical letter height as
+a 1080p one: about 10% of the stage's height by default, which works out
+to roughly 190pt (a ~2" capital letter) on a 70" TV, adjustable from 70%
+to 140% with the **Text** control. Line height is 1.5. Underneath, in its
+own dimmed zone, is a one-line **Next** preview of what's coming, and
+above the lines a badge for the current section or duet part.
 
-Other Stage Mode keyboard shortcuts: `Space` toggles manual auto-scroll
-(mutually exclusive with the tempo guide, since both drive scrolling),
-`←`/`→` move between songs in a setlist, `↑`/`↓` change scroll speed, `+`/`-`
-change text size, `Esc` closes the toolbar's context.
+- Lyrics are solid white and sweep to neon cyan as they're sung, letter by
+  letter rather than whole words flipping: the clock is read every
+  animation frame (not just on the audio element's ~4-per-second
+  `timeupdate`), and the sung color is revealed by a clip that grows
+  continuously through each word or syllable.
+- Duets: `[Male]`, `[Female]`, and `[All]` &mdash; as phrasing markers, or
+  as `[Section]` headers in a chord sheet &mdash; change the sweep color to
+  cyan, magenta, or lime respectively, so each singer can see at a glance
+  whose line it is.
+- Lines never wrap. One that's too wide for the screen is shrunk to fit
+  (down to half size) instead of spilling onto a third line, and every
+  zone on screen has a fixed size, so nothing ever jumps around as screens
+  change or the controls show and hide.
+- A screen comes up as soon as the previous one has been sung (up to 3
+  seconds before its first word), so there's always time to read ahead.
+- Countdowns: during an intro, a long instrumental break (3.5s or more),
+  or the tempo guide's count-in, the screen shows a progress bar across the
+  whole rest plus "Vocals in Ns", then a big 3-2-1 (with matching dots)
+  right before vocals come back in. With the tempo guide the count lands on
+  the beat (4-3-2-1 in 4/4); with an audio sync it counts seconds.
+- **Chords** (tempo-guide songs) shows each chord in neon yellow above the
+  word it changes on, transposed with the key. Instrumental lines show
+  their chord run with the current chord lit.
+
+**Controls.** A dock of large buttons (about 3 inches tall on a 70" TV)
+sits at the bottom: Exit, Prev/Next song, Restart, Play/Pause, Key -/+,
+Tempo -/+ (karaoke view) or auto-scroll Speed -/+ (chord sheet view),
+Text -/+, Sheet/Karaoke (switch views), Chords (karaoke view) or Scroll
+(auto-scroll on/off, sheet view), and Settings (beats per line, count-in,
+flats vs. sharps, full screen). While a song plays the dock fades out after
+4 seconds and the cursor hides; any mouse movement, touch, or button press
+brings it back, and it stays up while paused. Its space is always reserved,
+so the lyrics don't move when it appears.
+
+With a TV remote or D-pad: while the dock is hidden, the first arrow or OK
+press only wakes it and focuses Play (nothing fires blind); after that,
+arrows move between buttons (wrapping around) and OK presses the focused
+one. Focus is a thick yellow ring. Hardware media keys (play/pause,
+next/previous track) work through the browser's Media Session API, and the
+screen is kept awake while playing where the browser supports it.
+
+**Changing the tempo mid-song.** Tempo -/+ works while the song is
+playing, and you keep your place: the highlight stays on the same word and
+just carries on faster or slower from there (the clock is rescaled in
+musical time rather than seconds, so it doesn't jump ahead or back). With
+the tempo guide it steps the BPM by 2 (40&ndash;240). For a song synced to
+its uploaded audio, it changes the track's playback speed in 5% steps
+(70%&ndash;130%) without changing its pitch, and the lyrics stay locked to
+the audio. Each new song starts back at its own tempo.
+
+**Auto-scroll speed.** In the chord sheet view, Scroll starts and stops the
+auto-scroll and Speed -/+ changes how fast it goes (0&ndash;30) while it's
+moving &mdash; slow speeds now scroll smoothly instead of all rounding to
+the same rate.
+
+Keyboard shortcuts: `Space`/`P` play/pause, `R`/`Home` restart, `,`/`.`
+slower/faster (tempo in the karaoke view, scroll speed in the sheet view),
+`N`/`Page Down` next song, `Page Up` previous song, `[`/`]` key down/up,
+`-`/`+` text size, `K` or `V` karaoke/sheet view, `C` chords, `S`
+auto-scroll (sheet view), `F` full screen, `Esc` hide the controls.
+
+**Key change.** For a tempo-guide song, Key -/+ transposes the chords (and
+shows the new key, e.g. "A (+2)"). For a song with an audio sync, it
+pitch-shifts the backing track itself, up to 6 semitones either way,
+without changing its tempo &mdash; so the lyric timing stays in sync. This
+runs in an AudioWorklet (`lib/pitchShift.ts`), which browsers only allow on
+a secure origin: open the app over `https` (or on `localhost`) on the TV,
+or the Key buttons are disabled for audio songs. Playback doesn't touch Web
+Audio at all until the key actually moves off 0. The shifter is a simple
+granular one, fine for a few semitones, and adds up to ~40ms of latency
+while shifted.
+
+**Tempo guide.** A song without an audio sync is paced by its BPM and a
+"beats per line" setting (4 by default, i.e. one bar in 4/4 &mdash; lower
+it for a waltz), after a count-in (4 beats by default, 0 to turn it off).
+It's a heuristic &mdash; `beatsPerLine` beats per lyric line, split across
+the line's words by word length &mdash; not a frame-accurate sync, but a
+steady visual metronome to keep a singer on tempo. Its screens follow the
+chord sheet's own structure: blank lines and `[Section]` headers are breath
+breaks, lines pair up two to a screen, and a chords-only line is an
+instrumental rest.
+
+Display preferences (text size, karaoke vs. sheet view, chords on/off,
+beats per line, count-in, scroll speed) are remembered per device.
 
 ## Karaoke Sync (KaraFun-style phrasing)
 
@@ -286,15 +412,17 @@ so you can redo a stretch without starting over. A song is only "ready" for
 Stage Mode once every word has a tapped time; **Save phrasing** works at
 any point, so a half-tapped draft is safe to leave and come back to.
 
+The editor's practice screen is the actual Stage Mode renderer in a 16:9
+box, so what you see while tapping is exactly what the singer will see on
+the TV.
+
 **In Stage Mode.** A song with both audio uploaded and a fully-tapped
-phrasing automatically opens in Stage Mode's audio-synced karaoke view
-instead of the tempo guide &mdash; a big two-line screen with a true
-sweeping highlight through each word, driven by the real track instead of
-a BPM guess. `Space` plays/pauses the audio and `K` (or the header button)
-switches back to the plain chords/tempo-guide view and back again, per
-song, if you'd rather scroll the full chord sheet. A setlist mixes freely:
-each song in the run uses its own audio-synced view if it's ready, and
-falls back to the regular chords/tempo-guide view otherwise.
+phrasing plays from its real audio track instead of the tempo guide: Play
+starts the track, the sweep follows your tapped timestamps, and Key -/+
+pitch-shifts the track (see [Stage Mode](#stage-mode-the-tv--kiosk-display)).
+The Sheet view still shows the full chord sheet, without a word highlight,
+while the audio plays. A setlist mixes freely: each song uses its own
+audio sync if it's ready and the tempo guide otherwise.
 
 ## What's from the starter kit, unmodified
 
