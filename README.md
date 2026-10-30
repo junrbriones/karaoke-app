@@ -1,4 +1,4 @@
-# ChordStage
+# JBKaraoke
 
 A karaoke/live-singing songbook: add lyrics with guitar chords, transpose on
 the fly, and run a set through a distraction-free Stage Mode with a

@@ -9,7 +9,7 @@ defineProps<{
   description?: string
 }>()
 
-const appName = import.meta.env.VITE_APP_NAME ?? "Vue Starter Kit"
+const appName = import.meta.env.VITE_APP_NAME ?? "JBKaraoke"
 </script>
 
 <template>
@@ -24,18 +24,19 @@ const appName = import.meta.env.VITE_APP_NAME ?? "Vue Starter Kit"
         :href="home.index()"
         class="relative z-20 flex items-center text-lg font-medium"
       >
-        <AppLogoIcon class="mr-2 size-8 fill-current text-white" />
+        <AppLogoIcon class="mr-2 size-8" />
         {{ appName }}
       </Link>
       <div class="relative z-20 mt-auto">
-        <blockquote class="space-y-2">
+        <div class="space-y-2">
           <p class="text-lg">
-            &ldquo;The One Person Framework. A toolkit so powerful that it
-            allows a single individual to create modern applications upon which
-            they might build a competitive business.&rdquo;
+            Lyrics and guitar chords on one big screen &mdash; sing along, play
+            along, and keep the whole band in time.
           </p>
-          <footer class="text-sm text-neutral-300">DHH</footer>
-        </blockquote>
+          <p class="text-sm text-neutral-300">
+            Your songbook, stage-ready for karaoke nights and live gigs.
+          </p>
+        </div>
       </div>
     </div>
     <div class="lg:p-8">

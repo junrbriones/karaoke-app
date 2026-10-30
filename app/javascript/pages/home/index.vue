@@ -5,7 +5,7 @@ import AppLogoIcon from "@/components/AppLogoIcon.vue"
 import ResourceItem from "@/components/ResourceItem.vue"
 import { sessions, songs } from "@/routes"
 
-const appName = import.meta.env.VITE_APP_NAME ?? "ChordStage"
+const appName = import.meta.env.VITE_APP_NAME ?? "JBKaraoke"
 
 const links = [
   [
@@ -98,9 +98,9 @@ const links = [
         </div>
 
         <div
-          class="relative -mb-px aspect-[335/376] w-full shrink-0 overflow-hidden rounded-t-lg bg-[#D30001] p-10 text-white lg:mb-0 lg:-ml-px lg:aspect-auto lg:w-[438px] lg:rounded-t-none lg:rounded-r-lg"
+          class="relative -mb-px flex aspect-[335/376] w-full shrink-0 items-center justify-center overflow-hidden rounded-t-lg bg-[#0b0b10] bg-[radial-gradient(circle_at_50%_40%,rgb(124_107_255/0.28),transparent_65%)] p-14 lg:mb-0 lg:-ml-px lg:aspect-auto lg:w-[438px] lg:rounded-t-none lg:rounded-r-lg"
         >
-          <AppLogoIcon class="h-full w-full" />
+          <AppLogoIcon class="h-full max-h-80 w-full" />
         </div>
       </main>
     </div>
