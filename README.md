@@ -330,16 +330,31 @@ its uploaded audio, it changes the track's playback speed in 5% steps
 (70%&ndash;130%) without changing its pitch, and the lyrics stay locked to
 the audio. Each new song starts back at its own tempo.
 
-**Auto-scroll speed.** In the chord sheet view, Scroll starts and stops the
-auto-scroll and Speed -/+ changes how fast it goes (0&ndash;30) while it's
-moving &mdash; slow speeds now scroll smoothly instead of all rounding to
-the same rate.
+**The chord sheet view** works like a teleprompter. There's a fixed
+reading line about a third of the way down the screen (marked by a cyan
+tick in the left margin), and the song moves past it:
+
+- With **Scroll** (auto-scroll) on, whichever line is crossing the reading
+  line is marked as the current one &mdash; a highlighted band with a
+  &#9654; pointer &mdash; while lines already passed fade back and lines
+  still to come are slightly dimmed, so the singer never loses their place
+  at any speed. Speed -/+ changes how fast it goes (0&ndash;30) while it's
+  moving; slow speeds scroll smoothly instead of all rounding to the same
+  rate. An audio-synced song can auto-scroll while its track plays.
+- With the **tempo guide** playing, the line being sung is eased onto the
+  reading line as the song goes (a smooth glide, not a jump), marked the
+  same way. A ball bounces along the words: it lands on each word just as
+  it starts and arcs over to the next one in time with the music &mdash;
+  across to the next line too &mdash; staying in the gap between the chords
+  and the lyrics. Each word fills with color left to right as it's sung,
+  and the words already sung on that line stay lit. Live Sync's sheet view
+  does the same, following the shared clock.
 
 Keyboard shortcuts: `Space`/`P` play/pause, `R`/`Home` restart, `,`/`.`
 slower/faster (tempo in the karaoke view, scroll speed in the sheet view),
 `N`/`Page Down` next song, `Page Up` previous song, `[`/`]` key down/up,
 `-`/`+` text size, `K` or `V` karaoke/sheet view, `C` chords, `S`
-auto-scroll (sheet view), `F` full screen, `Esc` hide the controls.
+auto-scroll on/off (sheet view), `F` full screen, `Esc` hide the controls.
 
 **Key change.** For a tempo-guide song, Key -/+ transposes the chords (and
 shows the new key, e.g. "A (+2)"). For a song with an audio sync, it

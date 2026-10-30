@@ -19,8 +19,8 @@ import {
 } from "lucide-vue-next"
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue"
 
-import SongBody from "@/components/karaoke/SongBody.vue"
 import LyricStage from "@/components/karaoke/tv/LyricStage.vue"
+import SheetView from "@/components/karaoke/tv/SheetView.vue"
 import TvButton from "@/components/karaoke/tv/TvButton.vue"
 import TvPanel from "@/components/karaoke/tv/TvPanel.vue"
 import TvShell from "@/components/karaoke/tv/TvShell.vue"
@@ -29,7 +29,7 @@ import { isButtonTarget, isTypingTarget } from "@/composables/useTv"
 import { getConsumer } from "@/lib/cable"
 import { parseBody } from "@/lib/chordSheet"
 import { fromChordSheet } from "@/lib/lyricDisplay"
-import { buildTimeline, findActive } from "@/lib/tempoGuide"
+import { buildTimeline, guideAt } from "@/lib/tempoGuide"
 import { transposeToken } from "@/lib/transpose"
 import {
   LYRIC_SCALE,
@@ -109,9 +109,7 @@ const track = computed(() =>
 const timeline = computed(() =>
   buildTimeline(blocks.value, state.value.bpm, state.value.beats_per_line),
 )
-const sheetActive = computed(() =>
-  findActive(timeline.value.lines, elapsed.value, timeline.value.totalDuration),
-)
+const sheetGuide = computed(() => guideAt(timeline.value.lines, elapsed.value))
 
 const stageHint = computed(() => {
   if (state.value.playing) return null
@@ -348,17 +346,14 @@ onBeforeUnmount(() => {
         :artist="currentSong.artist"
         :hint="stageHint"
       />
-      <div v-else class="live-sheet">
-        <SongBody
-          tv
-          :blocks="blocks"
-          :semitones="semitones"
-          :prefer-flat="preferFlat"
-          :font-scale="sheetScale"
-          :active-block-index="sheetActive.blockIndex"
-          :active-word-index="sheetActive.wordIndex"
-        />
-      </div>
+      <SheetView
+        v-else
+        :blocks="blocks"
+        :semitones="semitones"
+        :prefer-flat="preferFlat"
+        :font-scale="sheetScale"
+        :guide="sheetGuide"
+      />
     </template>
 
     <template #dock>
@@ -531,12 +526,6 @@ onBeforeUnmount(() => {
   font-size: max(20px, 3.6vh);
   font-weight: 900;
   text-align: center;
-}
-.live-sheet {
-  height: 100%;
-  overflow-y: auto;
-  padding: 2vh 4vw 6vh;
-  font-size: max(16px, 3.4vh);
 }
 .settings-note {
   max-width: 60vh;

@@ -18,8 +18,8 @@ import {
 } from "lucide-vue-next"
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue"
 
-import SongBody from "@/components/karaoke/SongBody.vue"
 import LyricStage from "@/components/karaoke/tv/LyricStage.vue"
+import SheetView from "@/components/karaoke/tv/SheetView.vue"
 import TvButton from "@/components/karaoke/tv/TvButton.vue"
 import TvPanel from "@/components/karaoke/tv/TvPanel.vue"
 import TvShell from "@/components/karaoke/tv/TvShell.vue"
@@ -33,7 +33,7 @@ import {
 } from "@/composables/useTv"
 import { parseBody } from "@/lib/chordSheet"
 import { fromChordSheet, fromPhrasing } from "@/lib/lyricDisplay"
-import { buildTimeline, findActive, rescaleElapsed } from "@/lib/tempoGuide"
+import { buildTimeline, guideAt, rescaleElapsed } from "@/lib/tempoGuide"
 import { transposeToken } from "@/lib/transpose"
 import {
   LYRIC_SCALE,
@@ -162,21 +162,17 @@ const stageHint = computed(() => {
   return next ? `Up next: ${next.title}` : null
 })
 
-// The chord sheet view's word highlight follows the tempo guide; with an
-// audio sync the karaoke view is where the timing lives.
-const sheetActive = computed(() => {
-  if (usesAudio.value) return { blockIndex: -1, wordIndex: -1 }
-  return findActive(
-    timeline.value.lines,
-    tempoTime.value,
-    timeline.value.totalDuration,
-  )
-})
+// The chord sheet view's ball and word fill follow the tempo guide; with
+// an audio sync the karaoke view is where the timing lives (the sheet can
+// still auto-scroll past its reading line).
+const sheetGuide = computed(() =>
+  usesAudio.value ? null : guideAt(timeline.value.lines, tempoTime.value),
+)
 
 /* ---- transport ---- */
 function play() {
   if (usesAudio.value) {
-    stopScroll()
+    // An audio song's sheet can keep auto-scrolling while the track plays.
     audioEnded.value = false
     void audioEl.value?.play().catch(() => {})
   } else {
@@ -199,7 +195,7 @@ function restart() {
     tempoTime.value = origin.value
     tempoLast = null
   }
-  if (sheetEl.value) sheetEl.value.scrollTop = 0
+  sheetView.value?.toTop()
 }
 
 function goTo(index: number) {
@@ -218,7 +214,7 @@ function resetForSong() {
   tempoTime.value = origin.value
   audioEnded.value = false
   playbackRate.value = 1
-  if (sheetEl.value) sheetEl.value.scrollTop = 0
+  sheetView.value?.toTop()
 }
 
 /* ---- tempo: adjustable mid-song without losing your place ---- */
@@ -335,41 +331,18 @@ function toggleView() {
   view.value = view.value === "karaoke" ? "sheet" : "karaoke"
 }
 
-/* ---- chord sheet auto-scroll ---- */
-const sheetEl = ref<HTMLElement | null>(null)
+/* ---- chord sheet auto-scroll (the scrolling itself, and marking the
+   line on the reading line, live in SheetView) ---- */
+const sheetView = ref<InstanceType<typeof SheetView> | null>(null)
 const scrolling = ref(false)
-let scrollRaf: number | null = null
-let scrollLast: number | null = null
-// The position is kept as a fraction: browsers round scrollTop to whole
-// pixels, so adding <1px a frame would make slow speeds all scroll at the
-// same rounded-up rate and every speed step uneven.
-let scrollPos = 0
-function scrollFrame(ts: number) {
-  if (!scrolling.value) return
-  const el = sheetEl.value
-  if (scrollLast != null && el) {
-    // Someone scrolled by hand: carry on from there.
-    if (Math.abs(el.scrollTop - scrollPos) > 2) scrollPos = el.scrollTop
-    scrollPos += (scrollSpeed.value * (ts - scrollLast)) / 1000
-    el.scrollTop = scrollPos
-  } else if (el) {
-    scrollPos = el.scrollTop
-  }
-  scrollLast = ts
-  scrollRaf = requestAnimationFrame(scrollFrame)
-}
 function toggleScroll() {
   if (scrolling.value) return stopScroll()
   // The tempo guide already scrolls to follow its highlight.
   if (!usesAudio.value) stopTempo()
   scrolling.value = true
-  scrollLast = null
-  scrollRaf = requestAnimationFrame(scrollFrame)
 }
 function stopScroll() {
   scrolling.value = false
-  if (scrollRaf) cancelAnimationFrame(scrollRaf)
-  scrollRaf = null
 }
 
 /* ---- exit, fullscreen, media keys ---- */
@@ -549,17 +522,17 @@ onBeforeUnmount(() => {
         :artist="currentSong.artist"
         :hint="stageHint"
       />
-      <div v-else ref="sheetEl" class="stage-sheet">
-        <SongBody
-          tv
-          :blocks="blocks"
-          :semitones="semitones"
-          :prefer-flat="preferFlat"
-          :font-scale="sheetScale"
-          :active-block-index="sheetActive.blockIndex"
-          :active-word-index="sheetActive.wordIndex"
-        />
-      </div>
+      <SheetView
+        v-else
+        ref="sheetView"
+        :blocks="blocks"
+        :semitones="semitones"
+        :prefer-flat="preferFlat"
+        :font-scale="sheetScale"
+        :guide="sheetGuide"
+        :auto-scroll="scrolling"
+        :speed="scrollSpeed"
+      />
     </template>
 
     <template #dock>
@@ -768,12 +741,6 @@ onBeforeUnmount(() => {
 .stage-empty__sub {
   color: var(--tv-dim);
   font-size: 0.6em;
-}
-.stage-sheet {
-  height: 100%;
-  overflow-y: auto;
-  padding: 2vh 4vw 6vh;
-  font-size: max(16px, 3.4vh);
 }
 .settings-note {
   max-width: 60vh;

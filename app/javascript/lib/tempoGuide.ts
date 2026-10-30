@@ -205,3 +205,57 @@ export function rescaleElapsed(
   const toBpl = to.beatsPerLine > 0 ? to.beatsPerLine : 4
   return elapsed * beatRatio * (toBpl / fromBpl)
 }
+
+// Where the tempo guide is, precisely enough to animate: the word (or
+// instrumental chord) being sung, how far through it we are, and the one
+// after it -- which may be on the next line -- so a bouncing ball can be
+// mid-flight between the two instead of jumping.
+export interface GuidePosition {
+  blockIndex: number
+  wordIndex: number
+  progress: number // 0..1 through the current word
+  next: { blockIndex: number; wordIndex: number } | null
+}
+
+function firstWordFrom(
+  lines: TimelineLine[],
+  from: number,
+): { blockIndex: number; wordIndex: number } | null {
+  for (let i = from; i < lines.length; i++) {
+    const w = lines[i]?.words[0]
+    if (w) return { blockIndex: i, wordIndex: w.wordIndex }
+  }
+  return null
+}
+
+export function guideAt(
+  lines: TimelineLine[],
+  elapsed: number,
+): GuidePosition | null {
+  let last: GuidePosition | null = null
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
+    if (!line || !line.words.length) continue
+    if (elapsed < line.lineStart) return null
+    const words = line.words
+    for (let k = 0; k < words.length; k++) {
+      const w = words[k]
+      if (elapsed >= w.start && elapsed < w.end) {
+        const following = words[k + 1]
+        return {
+          blockIndex: i,
+          wordIndex: w.wordIndex,
+          progress:
+            w.end > w.start ? (elapsed - w.start) / (w.end - w.start) : 1,
+          next: following
+            ? { blockIndex: i, wordIndex: following.wordIndex }
+            : firstWordFrom(lines, i + 1),
+        }
+      }
+    }
+    const tail = words[words.length - 1]
+    last = { blockIndex: i, wordIndex: tail.wordIndex, progress: 1, next: null }
+  }
+  // Past the end: rest on the very last word.
+  return last
+}
