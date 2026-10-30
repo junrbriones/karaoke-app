@@ -60,4 +60,15 @@ Rails.application.routes.draw do
 
   # Reveal health status on /up that returns 200 if the app boots with no exceptions, otherwise 500.
   get "up" => "rails/health#show", as: :rails_health_check
+
+  if Rails.env.local?
+    # Development shows Rails' debug pages for errors; these preview the
+    # friendly error pages people see in production.
+    get "errors/:status", to: "errors#preview", constraints: { status: /\d{3}/ }, as: :error_preview
+  else
+    # Anything else is a friendly 404 at the address that was asked for.
+    # (Leaves Rails' own /rails/... routes -- uploads etc. -- alone.)
+    match "*unmatched", to: "errors#not_found", via: :all,
+      constraints: ->(req) { !req.path.start_with?("/rails/") }
+  end
 end

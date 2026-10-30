@@ -13,7 +13,7 @@ class SessionsController < InertiaController
       @session = user.sessions.create!
       cookies.signed.permanent[:session_token] = { value: @session.id, httponly: true }
 
-      redirect_to dashboard_path, notice: "Signed in successfully"
+      redirect_to after_sign_in_path, notice: "Signed in successfully"
     else
       redirect_to sign_in_path, alert: "That email or password is incorrect"
     end
@@ -29,5 +29,12 @@ class SessionsController < InertiaController
 
   def set_session
     @session = Current.user.sessions.find(params[:id])
+  end
+
+  # Wherever they were headed before being asked to sign in (only ever a
+  # path on this site), or the dashboard.
+  def after_sign_in_path
+    path = session.delete(:return_to_after_sign_in).to_s
+    path.start_with?("/") && !path.start_with?("//") ? path : dashboard_path
   end
 end

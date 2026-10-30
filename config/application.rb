@@ -38,5 +38,14 @@ module VueStarterKit
 
     # Don't generate system test files.
     config.generators.system_tests = nil
+
+    # Errors render the app's own error page (with a way back) rather than
+    # the static files in public/ -- which remain the fallback if even that
+    # fails. See ErrorsController.
+    config.exceptions_app = lambda do |env|
+      ErrorsController.action(:show).call(env)
+    rescue StandardError
+      ActionDispatch::PublicExceptions.new(Rails.public_path).call(env)
+    end
   end
 end

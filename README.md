@@ -439,6 +439,43 @@ The Sheet view still shows the full chord sheet, without a word highlight,
 while the audio plays. A setlist mixes freely: each song uses its own
 audio sync if it's ready and the tempo guide otherwise.
 
+## When something goes wrong
+
+Errors show a JBKaraoke page that says what happened in plain words and
+always offers a way forward, instead of a bare status page:
+
+- **Not found (404).** It says what's probably missing based on the
+  address &mdash; "We couldn't find that song: it may have been deleted or
+  renamed, or it hasn't been shared with you" &mdash; shows the address
+  that was tried, and links to the nearest pages that still work (a missing
+  setlist offers its group's Setlists, the group page, and All groups). An
+  unknown address gets this page at that same address.
+- **No access (403), bad or stale requests (400, 422), server errors (500)
+  and the server being down or busy (502&ndash;504)** each get their own
+  explanation. Server errors offer **Try again** and show an error
+  reference to pass to an admin (it's the request ID in the server logs).
+  When the server is restarting or busy, the page tries again by itself
+  after 20 seconds.
+- Every error page has **Go back** (when there's somewhere to go back to)
+  and a way home: **My songs** when signed in, **Sign in** when not. The
+  main button is focused, so a keyboard or TV remote is one press away.
+- **A form that sat open too long** (its security token went stale after a
+  sign-out or a deploy) no longer fails with an error: the page reloads
+  with a note that the change wasn't saved, ready to try again.
+- **Signing in after being sent to the sign-in page** returns you to the
+  page you were trying to open, instead of the dashboard.
+- **Losing the connection** shows a "You're offline" notice until it comes
+  back. A page that couldn't load gets a **Try again** button, and a change
+  that couldn't be sent says it wasn't saved, so nobody assumes it was.
+- If the server answers with something that isn't from the app (a proxy's
+  "Bad Gateway" page, say), production shows a short notice with **Try
+  again** rather than a popup of raw HTML.
+
+Development still shows Rails' detailed error pages; preview the friendly
+ones at `/errors/404`, `/errors/500`, `/errors/503`, etc. The static pages
+in `public/` (same look, no app code) are only the last resort, for when
+the app can't render its own error page at all.
+
 ## What's from the starter kit, unmodified
 
 Authentication (sign up/in, email verification, password reset), account

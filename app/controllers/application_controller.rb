@@ -10,7 +10,16 @@ class ApplicationController < ActionController::Base
   private
 
   def authenticate
-    redirect_to sign_in_path unless perform_authentication
+    return if perform_authentication
+
+    # Come back here after signing in, rather than starting over from the
+    # dashboard (only for pages -- replaying a form post isn't safe).
+    if request.get? && request.path != root_path &&
+        (request.headers["X-Inertia"].present? || !request.xhr?)
+      session[:return_to_after_sign_in] = request.fullpath
+      flash[:alert] = "Please sign in to continue."
+    end
+    redirect_to sign_in_path
   end
 
   def require_no_authentication
