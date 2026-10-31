@@ -94,10 +94,13 @@ function distributeBars(
   return words
 }
 
+// `lineBeats` (from lib/lineTiming.ts) overrides individual lines' lengths,
+// in beats, per block index -- null keeps the default.
 export function buildTimeline(
   blocks: SongBlock[],
   bpm: number,
   beatsPerLine: number,
+  lineBeats?: (number | null)[] | null,
 ): Timeline {
   const safeBpm = bpm > 0 ? bpm : 100
   const safeBeats = beatsPerLine > 0 ? beatsPerLine : 4
@@ -105,15 +108,18 @@ export function buildTimeline(
   const lineDuration = secPerBeat * safeBeats
 
   let t = 0
-  const lines: TimelineLine[] = blocks.map((block) => {
+  const lines: TimelineLine[] = blocks.map((block, i) => {
     if (block.type !== "pair") return null
 
     const lineStart = t
     const lyrics = block.lyrics || ""
     const wordMatches = [...lyrics.matchAll(/\S+/g)].map((m) => m[0])
 
+    const custom = lineBeats?.[i]
+    const override = custom && custom > 0 ? custom * secPerBeat : null
+
     if (wordMatches.length || !block.chords) {
-      const lineEnd = t + lineDuration
+      const lineEnd = t + (override ?? lineDuration)
       t = lineEnd
       return {
         lineStart,
@@ -125,15 +131,17 @@ export function buildTimeline(
     const groups = chordGroups(block.chords)
     const bars = Math.max(1, groups.length)
     const passes = block.times && block.times > 0 ? block.times : 1
-    const lineEnd = t + lineDuration * bars * passes
+    // A custom length stretches or squeezes the run's bars evenly.
+    const barDuration = override ? override / (bars * passes) : lineDuration
+    const lineEnd = t + barDuration * bars * passes
     t = lineEnd
     return {
       lineStart,
       lineEnd,
-      words: distributeBars(groups, lineStart, lineDuration, passes),
+      words: distributeBars(groups, lineStart, barDuration, passes),
       bars,
       passes,
-      barDuration: lineDuration,
+      barDuration,
     }
   })
 
@@ -206,6 +214,36 @@ export function rescaleElapsed(
   return elapsed * beatRatio * (toBpl / fromBpl)
 }
 
+// The same idea for two timelines of the same song (a new tempo, beats
+// per line, or line timing): find the line we're in and how far through
+// it, and land at the same spot in the other timeline. Works whatever
+// lengths the lines have, which a single ratio can't once lines carry
+// their own timing. The count-in (negative time) scales by the beat.
+export function remapElapsed(
+  elapsed: number,
+  from: Timeline,
+  to: Timeline,
+  fromBpm: number,
+  toBpm: number,
+): number {
+  if (elapsed < 0) {
+    const a = fromBpm > 0 ? fromBpm : 100
+    const b = toBpm > 0 ? toBpm : 100
+    return (elapsed * a) / b
+  }
+  for (let i = 0; i < from.lines.length; i++) {
+    const src = from.lines[i]
+    const dst = to.lines[i]
+    if (!src || !dst) continue
+    if (elapsed >= src.lineStart && elapsed < src.lineEnd) {
+      const f = (elapsed - src.lineStart) / (src.lineEnd - src.lineStart)
+      return dst.lineStart + f * (dst.lineEnd - dst.lineStart)
+    }
+  }
+  // Past the last line (the tail after the song): keep the same overshoot.
+  return to.totalDuration + Math.max(0, elapsed - from.totalDuration)
+}
+
 // Where the tempo guide is, precisely enough to animate: the word (or
 // instrumental chord) being sung, how far through it we are, and the one
 // after it -- which may be on the next line -- so a bouncing ball can be
@@ -215,6 +253,10 @@ export interface GuidePosition {
   wordIndex: number
   progress: number // 0..1 through the current word
   next: { blockIndex: number; wordIndex: number } | null
+  // 0..1 through the whole line, and the line after it, so the sheet can
+  // glide from one line to the next over exactly this line's length.
+  lineProgress: number
+  nextLine: number | null
 }
 
 function firstWordFrom(
@@ -250,11 +292,23 @@ export function guideAt(
           next: following
             ? { blockIndex: i, wordIndex: following.wordIndex }
             : firstWordFrom(lines, i + 1),
+          lineProgress:
+            line.lineEnd > line.lineStart
+              ? (elapsed - line.lineStart) / (line.lineEnd - line.lineStart)
+              : 1,
+          nextLine: firstWordFrom(lines, i + 1)?.blockIndex ?? null,
         }
       }
     }
     const tail = words[words.length - 1]
-    last = { blockIndex: i, wordIndex: tail.wordIndex, progress: 1, next: null }
+    last = {
+      blockIndex: i,
+      wordIndex: tail.wordIndex,
+      progress: 1,
+      next: null,
+      lineProgress: 1,
+      nextLine: null,
+    }
   }
   // Past the end: rest on the very last word.
   return last

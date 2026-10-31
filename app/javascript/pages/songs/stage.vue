@@ -32,8 +32,9 @@ import {
   useMediaSession,
 } from "@/composables/useTv"
 import { parseBody } from "@/lib/chordSheet"
+import { lineBeatsFor } from "@/lib/lineTiming"
 import { fromChordSheet, fromPhrasing } from "@/lib/lyricDisplay"
-import { buildTimeline, guideAt, rescaleElapsed } from "@/lib/tempoGuide"
+import { buildTimeline, guideAt, remapElapsed } from "@/lib/tempoGuide"
 import { transposeToken } from "@/lib/transpose"
 import {
   LYRIC_SCALE,
@@ -42,7 +43,7 @@ import {
   stepValue,
   useTvPrefs,
 } from "@/lib/tvPrefs"
-import { songs as songsRoutes } from "@/routes"
+import { songs as songsRoutes, songsTimings } from "@/routes"
 import type { Song } from "@/types"
 
 const props = defineProps<{
@@ -68,6 +69,14 @@ const persist = { initOnMounted: true }
 const beatsPerLine = useLocalStorage("chordstage:beatsperline", 4, persist)
 const countIn = useLocalStorage("chordstage:countin", 4, persist)
 const scrollSpeed = useLocalStorage("chordstage:scrollspeed", 40, persist)
+// How the chord sheet's Scroll moves for a tempo-guide song: at the song's
+// own pace (line by line, as long as each line lasts -- see Line timing),
+// or at a free speed in pixels per second.
+const scrollPace = useLocalStorage<"song" | "free">(
+  "chordstage:scrollpace",
+  "song",
+  persist,
+)
 
 const semitones = ref(0)
 const preferFlat = ref(false)
@@ -97,8 +106,14 @@ const keyShift = useKeyShift(audioEl, audioSemitones)
 // just the clock running up to the song's own zero.
 const secPerBeat = computed(() => 60 / (bpm.value > 0 ? bpm.value : 100))
 const origin = computed(() => -countIn.value * secPerBeat.value)
+// The song's own line lengths (its Line timing), where it has them.
+function lineBeatsAt(perLine: number) {
+  return lineBeatsFor(blocks.value, currentSong.value?.line_timing, perLine)
+}
+const lineBeats = computed(() => lineBeatsAt(beatsPerLine.value))
+const hasLineTiming = computed(() => lineBeats.value.some((b) => b != null))
 const timeline = computed(() =>
-  buildTimeline(blocks.value, bpm.value, beatsPerLine.value),
+  buildTimeline(blocks.value, bpm.value, beatsPerLine.value, lineBeats.value),
 )
 const tempoEnd = computed(() => timeline.value.totalDuration + 4)
 const tempoTime = ref(0)
@@ -139,6 +154,7 @@ const track = computed(() => {
   return fromChordSheet(blocks.value, {
     bpm: bpm.value,
     beatsPerLine: beatsPerLine.value,
+    lineBeats: lineBeats.value,
     countInBeats: countIn.value,
     semitones: semitones.value,
     preferFlat: preferFlat.value,
@@ -203,6 +219,7 @@ function goTo(index: number) {
   audioEl.value?.pause()
   stopTempo()
   stopScroll()
+  sheetBall.value = true
   currentIndex.value = index
   resetForSong()
 }
@@ -231,10 +248,13 @@ function setTempo(nextBpm: number, nextBeatsPerLine = beatsPerLine.value) {
   )
   const l = Math.min(8, Math.max(1, Math.round(nextBeatsPerLine)))
   if (b === bpm.value && l === beatsPerLine.value) return
-  tempoTime.value = rescaleElapsed(
+  // Same line, same point in it, whatever length each line now has.
+  tempoTime.value = remapElapsed(
     tempoTime.value,
-    { bpm: bpm.value, beatsPerLine: beatsPerLine.value },
-    { bpm: b, beatsPerLine: l },
+    timeline.value,
+    buildTimeline(blocks.value, b, l, lineBeatsAt(l)),
+    bpm.value,
+    b,
   )
   bpm.value = b
   beatsPerLine.value = l
@@ -335,7 +355,29 @@ function toggleView() {
    line on the reading line, live in SheetView) ---- */
 const sheetView = ref<InstanceType<typeof SheetView> | null>(null)
 const scrolling = ref(false)
+// A tempo-guide song's sheet scrolls at the song's pace: the tempo clock
+// runs and the sheet glides one line to the next over exactly as long as
+// each line lasts, with the current line marked but no ball (a clean
+// teleprompter). Its speed is the Tempo. Free scrolling (pixels per
+// second) is for audio-synced songs, or when chosen in Settings.
+const songPaced = computed(
+  () => !usesAudio.value && scrollPace.value === "song",
+)
+const sheetBall = ref(true)
+const scrollActive = computed(() =>
+  songPaced.value ? tempoPlaying.value && !sheetBall.value : scrolling.value,
+)
 function toggleScroll() {
+  if (songPaced.value) {
+    if (tempoPlaying.value && !sheetBall.value) {
+      stopTempo()
+      sheetBall.value = true
+    } else {
+      sheetBall.value = false
+      if (!tempoPlaying.value) startTempo()
+    }
+    return
+  }
   if (scrolling.value) return stopScroll()
   // The tempo guide already scrolls to follow its highlight.
   if (!usesAudio.value) stopTempo()
@@ -343,6 +385,22 @@ function toggleScroll() {
 }
 function stopScroll() {
   scrolling.value = false
+}
+// The sheet's Tempo/Speed stepper, and , / . on the keyboard.
+const sheetTempo = computed(() => view.value === "karaoke" || songPaced.value)
+function nudgePace(dir: 1 | -1) {
+  if (sheetTempo.value) nudgeTempo(dir)
+  else nudgeScroll(dir)
+}
+function toggleScrollPace() {
+  stopScroll()
+  if (!sheetBall.value) stopTempo()
+  sheetBall.value = true
+  scrollPace.value = scrollPace.value === "song" ? "free" : "song"
+}
+function editLineTiming() {
+  const song = currentSong.value
+  if (song) router.visit(songsTimings.show({ song_id: song.slug }).url)
 }
 
 /* ---- exit, fullscreen, media keys ---- */
@@ -373,8 +431,10 @@ const statusText = computed(() => {
   if (props.songs.length > 1) {
     parts.push(`Song ${currentIndex.value + 1} of ${props.songs.length}`)
   }
-  if (!usesAudio.value) parts.push(`Tempo guide · ${bpm.value} BPM`)
-  else if (playbackRate.value !== 1) {
+  if (!usesAudio.value) {
+    parts.push(`Tempo guide · ${bpm.value} BPM`)
+    if (hasLineTiming.value) parts.push("line timing")
+  } else if (playbackRate.value !== 1) {
     parts.push(`Audio sync · ${Math.round(playbackRate.value * 100)}% speed`)
   } else parts.push("Audio sync")
   return parts.join(" · ")
@@ -436,10 +496,10 @@ function onKeydown(e: KeyboardEvent) {
       return shiftKey(-1)
     case ",":
     case "<":
-      return view.value === "karaoke" ? nudgeTempo(-1) : nudgeScroll(-1)
+      return nudgePace(-1)
     case ".":
     case ">":
-      return view.value === "karaoke" ? nudgeTempo(1) : nudgeScroll(1)
+      return nudgePace(1)
     case "k":
     case "K":
     case "v":
@@ -530,6 +590,7 @@ onBeforeUnmount(() => {
         :prefer-flat="preferFlat"
         :font-scale="sheetScale"
         :guide="sheetGuide"
+        :ball="sheetBall"
         :auto-scroll="scrolling"
         :speed="scrollSpeed"
       />
@@ -580,7 +641,7 @@ onBeforeUnmount(() => {
       </div>
       <div v-if="currentSong" class="tv-dock-group">
         <TvStepper
-          v-if="view === 'karaoke'"
+          v-if="sheetTempo"
           label="Tempo"
           :value="tempoLabel"
           :unit="usesAudio ? undefined : 'bpm'"
@@ -591,7 +652,9 @@ onBeforeUnmount(() => {
           :title="
             usesAudio
               ? 'Playback speed of the track; the pitch stays put (, and .)'
-              : 'Tempo guide speed, adjustable mid-song without losing your place (, and .)'
+              : view === 'sheet'
+                ? 'The song\'s pace: the sheet moves on as each line ends (, and .)'
+                : 'Tempo guide speed, adjustable mid-song without losing your place (, and .)'
           "
           @dec="nudgeTempo(-1)"
           @inc="nudgeTempo(1)"
@@ -644,9 +707,13 @@ onBeforeUnmount(() => {
           v-if="view === 'sheet'"
           :icon="ListMusic"
           label="Scroll"
-          title="Auto-scroll the chord sheet (S)"
+          :title="
+            songPaced
+              ? 'Scroll the chord sheet at the song\'s pace, marking the current line (S)'
+              : 'Auto-scroll the chord sheet (S)'
+          "
           toggle
-          :active="scrolling"
+          :active="scrollActive"
           @click="toggleScroll"
         />
         <TvButton
@@ -696,7 +763,31 @@ onBeforeUnmount(() => {
           settings don&rsquo;t apply &mdash; use Tempo in the controls to speed
           the track up or slow it down.
         </p>
+        <template v-if="!usesAudio">
+          <TvButton
+            label="Scroll at song pace"
+            title="The sheet's Scroll follows the song's tempo and line timing; turn off to scroll at a free speed"
+            toggle
+            :active="scrollPace === 'song'"
+            @click="toggleScrollPace"
+          />
+          <p class="settings-note">
+            {{
+              hasLineTiming
+                ? "This song has its own line timing, so each line lasts as long as it really does."
+                : "Every line lasts " +
+                  beatsPerLine +
+                  " beats. Give lines their real lengths with Line timing to match the song's pace."
+            }}
+          </p>
+          <TvButton
+            v-if="currentSong?.owned"
+            label="Edit line timing"
+            @click="editLineTiming"
+          />
+        </template>
         <TvStepper
+          v-if="usesAudio || !songPaced"
           label="Scroll speed"
           :value="scrollLabel"
           dec-label="Slower"

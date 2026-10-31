@@ -306,7 +306,8 @@ above the lines a badge for the current section or duet part.
 
 **Controls.** A dock of large buttons (about 3 inches tall on a 70" TV)
 sits at the bottom: Exit, Prev/Next song, Restart, Play/Pause, Key -/+,
-Tempo -/+ (karaoke view) or auto-scroll Speed -/+ (chord sheet view),
+Tempo -/+ (karaoke view, and the chord sheet view of a tempo-guide song)
+or auto-scroll Speed -/+ (the sheet of an audio-synced song),
 Text -/+, Sheet/Karaoke (switch views), Chords (karaoke view) or Scroll
 (auto-scroll on/off, sheet view), and Settings (beats per line, count-in,
 flats vs. sharps, full screen). While a song plays the dock fades out after
@@ -334,8 +335,15 @@ the audio. Each new song starts back at its own tempo.
 reading line about a third of the way down the screen (marked by a cyan
 tick in the left margin), and the song moves past it:
 
-- With **Scroll** (auto-scroll) on, whichever line is crossing the reading
-  line is marked as the current one &mdash; a highlighted band with a
+- For a tempo-guide song, **Scroll** moves the sheet at the *song's* pace:
+  each line arrives on the reading line exactly as it starts and glides on
+  over exactly as long as it lasts (its [line timing](#line-timing)), the
+  current line marked but no ball &mdash; a clean teleprompter. Its speed
+  is the Tempo -/+, so speeding up or slowing down keeps every line in
+  proportion. (Settings &rarr; "Scroll at song pace" off switches back to
+  free scrolling at a fixed speed.)
+- With free **Scroll** on (audio-synced songs, or song pace off),
+  whichever line is crossing the reading line is marked as the current one &mdash; a highlighted band with a
   &#9654; pointer &mdash; while lines already passed fade back and lines
   still to come are slightly dimmed, so the singer never loses their place
   at any speed. Speed -/+ changes how fast it goes (0&ndash;30) while it's
@@ -351,10 +359,10 @@ tick in the left margin), and the song moves past it:
   does the same, following the shared clock.
 
 Keyboard shortcuts: `Space`/`P` play/pause, `R`/`Home` restart, `,`/`.`
-slower/faster (tempo in the karaoke view, scroll speed in the sheet view),
+slower/faster (the tempo, or the free scroll speed),
 `N`/`Page Down` next song, `Page Up` previous song, `[`/`]` key down/up,
 `-`/`+` text size, `K` or `V` karaoke/sheet view, `C` chords, `S`
-auto-scroll on/off (sheet view), `F` full screen, `Esc` hide the controls.
+scroll on/off (sheet view), `F` full screen, `Esc` hide the controls.
 
 **Key change.** For a tempo-guide song, Key -/+ transposes the chords (and
 shows the new key, e.g. "A (+2)"). For a song with an audio sync, it
@@ -378,7 +386,41 @@ breaks, lines pair up two to a screen, and a chords-only line is an
 instrumental rest.
 
 Display preferences (text size, karaoke vs. sheet view, chords on/off,
-beats per line, count-in, scroll speed) are remembered per device.
+beats per line, count-in, scroll speed and pace) are remembered per device.
+
+### Line timing
+
+A flat "every line is one bar" can't keep up with a real song: some lines
+are held for two bars, some rush by in half of one, and an intro may be
+longer than its chords suggest. No scroll speed matches that, because the
+pace changes line by line. **Line timing** (the button on a song you own,
+or Stage Mode &rarr; Settings &rarr; Edit line timing) gives each line its
+real length, so the highlight, the ball, the band's instrumental guidance
+and the sheet's scrolling all move on to the next line exactly when the
+singer does &mdash; in Stage Mode and in Live Sync.
+
+- **Tap along**: press *Tap along from the top* (or *Tap from here* on any
+  line), sing or play along after the 4-beat count-in, and press `Space`
+  (or the big *Next line* button) the moment each next line begins. The
+  highlight waits at the end of a line for your tap rather than running
+  ahead, so you're never chasing it. `Backspace` undoes the last tap and
+  backs up to that line; `Esc` stops.
+- **By hand**: each line's length in beats, with -/+ (half a beat) or
+  typed in quarter beats, and a reset back to the default. Lines without
+  their own length use the default ("Untimed lines", the same beats-per-line
+  setting Stage Mode uses).
+- **Preview** plays the sheet exactly as the TV shows it (ball on or off),
+  from the top or from any line (&#9654;), and follows any edit live.
+
+Lengths are saved in beats, not seconds, so the Tempo control still speeds
+the whole song up or slows it down evenly &mdash; saving also stores the
+tempo you timed it at as the song's tempo. An instrumental line's length is
+spread evenly over its bars. A repeated section (`[Repeat Chorus 1]`)
+shares the timing of the original. Each line is matched by its section and
+position *and* its words, so if you rewrite a line, its old timing is
+dropped rather than applied to the wrong words (two plain sections with
+the same name are told apart as `Verse`, `Verse~2`). The timing is stored
+on the song as `line_timing` (`songs.line_timing`, JSON).
 
 ## Karaoke Sync (KaraFun-style phrasing)
 

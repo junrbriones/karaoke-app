@@ -1,5 +1,6 @@
 import type { LucideIcon } from "lucide-vue-next"
 
+import type { LineTiming } from "@/lib/lineTiming"
 import type { Phrasing } from "@/lib/phrasing"
 
 export interface Auth {
@@ -74,6 +75,7 @@ export interface Song {
   phrasing_ready: boolean
   audio_url?: string | null
   phrasing?: Phrasing | null
+  line_timing?: LineTiming | null
   shares?: SongShareRef[]
   shareable_groups?: ShareableGroup[]
 }

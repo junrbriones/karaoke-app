@@ -272,6 +272,8 @@ export interface ChordSheetOptions {
   countInBeats?: number
   semitones?: number
   preferFlat?: boolean
+  // Per-block line lengths in beats (lib/lineTiming.ts).
+  lineBeats?: (number | null)[] | null
 }
 
 // Which word each chord in a chord line lands on, by column: a chord sits
@@ -312,7 +314,7 @@ export function fromChordSheet(
   const semitones = opts.semitones ?? 0
   const preferFlat = opts.preferFlat ?? false
   const secPerBeat = 60 / bpm
-  const timeline = buildTimeline(blocks, bpm, beatsPerLine)
+  const timeline = buildTimeline(blocks, bpm, beatsPerLine, opts.lineBeats)
 
   const drafts: DraftScreen[] = []
   let label: string | null = null
@@ -438,9 +440,11 @@ function bandStateAt(
   const { beatsPerBar, barDuration } = track
   if (!screen?.instrumental || !screen.chords.length) return null
   if (!beatsPerBar || !barDuration) return null
-  const beatLength = barDuration / beatsPerBar
-  const runStart = screen.chords[0].start
+  const chords = screen.chords
+  const runStart = chords[0].start
   if (t < runStart) {
+    // The count-in is counted in the song's own beats.
+    const beatLength = barDuration / beatsPerBar
     return {
       bar: 0,
       bars: screen.bars,
@@ -450,17 +454,24 @@ function bandStateAt(
       countIn: Math.max(1, Math.ceil((runStart - t) / beatLength - 1e-6)),
     }
   }
-  let chord = screen.chords.findIndex((c) => t >= c.start && t < c.end)
-  if (chord === -1) chord = screen.chords.length - 1
-  const bar = Math.min(
-    screen.bars - 1,
-    Math.floor((t - runStart) / barDuration + 1e-9),
-  )
-  const intoBar = t - runStart - bar * barDuration
-  const beat = Math.min(
-    beatsPerBar - 1,
-    Math.max(0, Math.floor(intoBar / beatLength + 1e-9)),
-  )
+  let chord = chords.findIndex((c) => t >= c.start && t < c.end)
+  if (chord === -1) chord = chords.length - 1
+  // Measure the bar from its own chords: a run with a custom length (line
+  // timing) has bars longer or shorter than the song's standard bar.
+  const bar = chords[chord].bar
+  const inBar = chords.filter((c) => c.bar === bar)
+  const barStart = inBar[0].start
+  const barLength = inBar[inBar.length - 1].end - barStart
+  const beat =
+    barLength > 0
+      ? Math.min(
+          beatsPerBar - 1,
+          Math.max(
+            0,
+            Math.floor(((t - barStart) / barLength) * beatsPerBar + 1e-9),
+          ),
+        )
+      : 0
   return { bar, bars: screen.bars, beat, beatsPerBar, chord, countIn: null }
 }
 

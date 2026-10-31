@@ -24,6 +24,7 @@ Rails.application.routes.draw do
   resources :songs do
     resources :song_shares, only: [ :create, :destroy ]
     resource :phrasing, only: [ :show, :update ], controller: "songs/phrasings"
+    resource :timing, only: [ :show, :update ], controller: "songs/timings"
     member do
       patch :toggle_setlist
       get :stage

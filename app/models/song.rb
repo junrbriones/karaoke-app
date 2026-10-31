@@ -67,7 +67,7 @@ class Song < ApplicationRecord
   # Full JSON for a single song's page, including the body and (for the
   # owner only) sharing info.
   def detail_json(viewer)
-    json = summary_json(viewer).merge(body: body, phrasing: phrasing, audio_url: audio_url)
+    json = summary_json(viewer).merge(body: body, phrasing: phrasing, line_timing: line_timing, audio_url: audio_url)
     return json unless owned_by?(viewer)
 
     json.merge(

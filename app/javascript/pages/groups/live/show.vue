@@ -28,6 +28,7 @@ import TvStepper from "@/components/karaoke/tv/TvStepper.vue"
 import { isButtonTarget, isTypingTarget } from "@/composables/useTv"
 import { getConsumer } from "@/lib/cable"
 import { parseBody } from "@/lib/chordSheet"
+import { lineBeatsFor } from "@/lib/lineTiming"
 import { fromChordSheet } from "@/lib/lyricDisplay"
 import { buildTimeline, guideAt } from "@/lib/tempoGuide"
 import { transposeToken } from "@/lib/transpose"
@@ -97,17 +98,32 @@ const elapsed = computed(() => {
   return computeElapsed(state.value)
 })
 
+// The song's own line lengths (its Line timing), so everyone's highlight
+// moves on to the next line when the song really does.
+const lineBeats = computed(() =>
+  lineBeatsFor(
+    blocks.value,
+    currentSong.value?.line_timing,
+    state.value.beats_per_line,
+  ),
+)
 const track = computed(() =>
   fromChordSheet(blocks.value, {
     bpm: state.value.bpm,
     beatsPerLine: state.value.beats_per_line,
+    lineBeats: lineBeats.value,
     countInBeats: state.value.count_in_beats,
     semitones: semitones.value,
     preferFlat: preferFlat.value,
   }),
 )
 const timeline = computed(() =>
-  buildTimeline(blocks.value, state.value.bpm, state.value.beats_per_line),
+  buildTimeline(
+    blocks.value,
+    state.value.bpm,
+    state.value.beats_per_line,
+    lineBeats.value,
+  ),
 )
 const sheetGuide = computed(() => guideAt(timeline.value.lines, elapsed.value))
 

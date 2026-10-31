@@ -13,8 +13,10 @@ import type { GuidePosition } from "@/lib/tempoGuide"
 //   the current one (highlighted band and a pointer, lines already passed
 //   dimmed), so the singer always knows where to be, at any speed. The
 //   speed can change while it's moving.
-// - Tempo guide: the line being sung is eased onto the reading line as the
-//   song moves along, and the ball hops across its words.
+// - Tempo guide: the sheet glides continuously at the song's own pace --
+//   each line reaches the reading line exactly as it starts, taking as
+//   long to move on as that line lasts (its line timing) -- and the ball
+//   hops across its words (unless `ball` is off: a clean teleprompter).
 //
 // There's blank space above the first line and below the last so either
 // end can reach the reading line too.
@@ -27,6 +29,7 @@ const props = withDefaults(
     guide?: GuidePosition | null
     autoScroll?: boolean
     speed?: number // pixels per second
+    ball?: boolean // the bouncing ball and word fill, with the tempo guide
   }>(),
   {
     semitones: 0,
@@ -35,11 +38,15 @@ const props = withDefaults(
     guide: null,
     autoScroll: false,
     speed: 40,
+    ball: true,
   },
 )
 
 const READING_LINE = 0.34 // fraction of the visible height
-const FOLLOW_TIME = 0.22 // seconds for a line change to ease most of the way
+// Smoothing on top of the glide, so a jump (restart, a tempo change, a
+// song change) eases instead of snapping. Short enough that the glide
+// itself stays on time.
+const FOLLOW_TIME = 0.12
 
 const scroller = ref<HTMLElement | null>(null)
 const content = ref<HTMLElement | null>(null)
@@ -133,12 +140,24 @@ function run() {
   }
 }
 
-function followLine(blockIndex: number) {
+// Where the sheet should be: the current line on the reading line at its
+// start, sliding up to bring the next line there exactly when it begins.
+function glideTarget(g: GuidePosition): number | null {
   const s = scroller.value
-  const line = lines.find((l) => l.index === blockIndex)
-  if (!s || !line) return
+  const cur = lines.find((l) => l.index === g.blockIndex)
+  if (!s || !cur) return null
+  const next =
+    g.nextLine != null ? lines.find((l) => l.index === g.nextLine) : undefined
+  const p = Math.min(1, Math.max(0, g.lineProgress))
+  const y = cur.top + (next ? (next.top - cur.top) * p : 0)
   const max = s.scrollHeight - s.clientHeight
-  followTarget = Math.max(0, Math.min(max, line.top - readingOffset()))
+  return Math.max(0, Math.min(max, y - readingOffset()))
+}
+
+function follow(g: GuidePosition) {
+  const target = glideTarget(g)
+  if (target == null) return
+  followTarget = target
   run()
 }
 
@@ -153,9 +172,9 @@ watch(
   },
 )
 watch(
-  () => props.guide?.blockIndex,
-  (b) => {
-    if (b != null && b >= 0 && !props.autoScroll) followLine(b)
+  () => props.guide,
+  (g) => {
+    if (g && !props.autoScroll) follow(g)
   },
 )
 
@@ -166,7 +185,7 @@ function remeasure() {
       (scroller.value?.scrollTop ?? 0) + readingOffset() + 1,
     )
   } else if (props.guide) {
-    followLine(props.guide.blockIndex)
+    follow(props.guide)
   }
 }
 useResizeObserver(content, remeasure)
@@ -205,7 +224,7 @@ defineExpose({ toTop })
           :semitones="semitones"
           :prefer-flat="preferFlat"
           :font-scale="fontScale"
-          :guide="autoScroll ? null : guide"
+          :guide="autoScroll || !ball ? null : guide"
           :current-block-index="currentLine"
         />
       </div>
@@ -213,7 +232,7 @@ defineExpose({ toTop })
     </div>
     <div
       class="sheet-reading-line"
-      :class="{ 'is-on': autoScroll }"
+      :class="{ 'is-on': autoScroll || (!ball && !!guide) }"
       aria-hidden="true"
     />
   </div>

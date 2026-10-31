@@ -8,7 +8,12 @@ import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import AppLayout from "@/layouts/AppLayout.vue"
 import { parseBody } from "@/lib/chordSheet"
-import { songShares, songs as songsRoutes, songsPhrasings } from "@/routes"
+import {
+  songShares,
+  songs as songsRoutes,
+  songsPhrasings,
+  songsTimings,
+} from "@/routes"
 import type { BreadcrumbItem, ShareableGroup, Song } from "@/types"
 
 const props = defineProps<{ song: Song }>()
@@ -21,6 +26,9 @@ const breadcrumbs: BreadcrumbItem[] = [
 const semitones = ref(0)
 const preferFlat = ref(false)
 const blocks = computed(() => parseBody(props.song.body ?? ""))
+const hasLineTiming = computed(
+  () => Object.keys(props.song.line_timing?.lines ?? {}).length > 0,
+)
 
 function toggleSetlist() {
   router.patch(
@@ -121,6 +129,15 @@ function toggleShare(group: ShareableGroup) {
                   ? "Finish karaoke sync"
                   : "Add karaoke sync"
             }}
+          </Button>
+        </Link>
+        <Link
+          v-if="song.owned"
+          :href="songsTimings.show({ song_id: song.slug }).url"
+          title="How long each line lasts, so Stage Mode's tempo guide and sheet scrolling keep the song's real pace"
+        >
+          <Button variant="outline">
+            {{ hasLineTiming ? "Line timing ✓" : "Line timing" }}
           </Button>
         </Link>
         <span
