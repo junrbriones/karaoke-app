@@ -16,6 +16,10 @@ class Song < ApplicationRecord
 
   belongs_to :user
   has_one_attached :audio
+  # Optional "minus-one": the same song without its lead vocal, for Stage
+  # Mode's Vocals Off. Lined up with `audio` by phrasing["instrumentalOffset"]
+  # (seconds the minus-one runs ahead of the original).
+  has_one_attached :instrumental
 
   has_many :song_shares, dependent: :destroy
   has_many :groups, through: :song_shares
@@ -24,6 +28,7 @@ class Song < ApplicationRecord
   validates :title, presence: true
   validates :slug, presence: true, uniqueness: { scope: :user_id }
   validate :audio_is_valid
+  validate :instrumental_is_valid
 
   before_validation :generate_slug, if: -> { slug.blank? || title_changed? }
 
@@ -60,6 +65,7 @@ class Song < ApplicationRecord
       owned: owned_by?(viewer),
       owner_name: owned_by?(viewer) ? nil : user.name,
       has_audio: audio.attached?,
+      has_instrumental: instrumental.attached?,
       phrasing_ready: phrasing_complete?
     }
   end
@@ -67,18 +73,46 @@ class Song < ApplicationRecord
   # Full JSON for a single song's page, including the body and (for the
   # owner only) sharing info.
   def detail_json(viewer)
-    json = summary_json(viewer).merge(body: body, phrasing: phrasing, line_timing: line_timing, audio_url: audio_url)
+    json = summary_json(viewer).merge(
+      body: body, phrasing: phrasing, line_timing: line_timing,
+      audio_url: audio_url, instrumental_url: instrumental_url
+    )
     return json unless owned_by?(viewer)
 
     json.merge(
+      audio_file: attachment_json(audio),
+      instrumental_file: attachment_json(instrumental)&.merge(same_as_audio: instrumental_same_as_audio?),
       shares: song_shares.map { |s| { id: s.id, group_id: s.group_id } },
       shareable_groups: viewer.groups.order(:name).map { |g| { id: g.id, name: g.name } }
     )
   end
 
+  # An uploaded track's details, so the owner can see it's saved with the
+  # song (and doesn't upload it again).
+  def attachment_json(file)
+    return nil unless file.attached?
+
+    blob = file.blob
+    { filename: blob.filename.to_s, byte_size: blob.byte_size, uploaded_at: file.attachment.created_at.iso8601 }
+  end
+
   def audio_url
     return nil unless audio.attached?
     Rails.application.routes.url_helpers.rails_blob_path(audio, only_path: true)
+  end
+
+  # Not offered for playback when it's just a copy of the main audio (that
+  # would play the singer with Vocals Off); masking is used instead.
+  def instrumental_url
+    return nil unless instrumental.attached? && !instrumental_same_as_audio?
+    Rails.application.routes.url_helpers.rails_blob_path(instrumental, only_path: true)
+  end
+
+  def instrumental_same_as_audio?
+    return false unless instrumental.attached? && audio.attached?
+
+    checksum = instrumental.blob&.checksum
+    checksum.present? && checksum == audio.blob&.checksum
   end
 
   # True once the phrasing editor's own bookkeeping says every token has a
@@ -91,17 +125,34 @@ class Song < ApplicationRecord
   private
 
   def audio_is_valid
-    return unless audio.attached?
+    validate_audio_file(:audio)
+  end
 
-    blob = audio.blob
+  def instrumental_is_valid
+    validate_audio_file(:instrumental)
+    # Only checked when a minus-one is being uploaded: one that's already
+    # attached is simply ignored for playback (see instrumental_url), and
+    # mustn't stop the rest of the song -- its sync -- from saving.
+    return unless attachment_changes.key?("instrumental")
+
+    if instrumental_same_as_audio?
+      errors.add(:instrumental, "is the very same file as the song's audio -- upload the version without the lead vocal")
+    end
+  end
+
+  def validate_audio_file(name)
+    file = public_send(name)
+    return unless file.attached?
+
+    blob = file.blob
     return unless blob
 
     unless ALLOWED_AUDIO_TYPES.include?(blob.content_type)
-      errors.add(:audio, "must be an audio file (mp3, wav, ogg, m4a, aac, or flac)")
+      errors.add(name, "must be an audio file (mp3, wav, ogg, m4a, aac, or flac)")
     end
 
     if blob.byte_size > MAX_AUDIO_BYTES
-      errors.add(:audio, "must be smaller than #{MAX_AUDIO_BYTES / 1.megabyte}MB")
+      errors.add(name, "must be smaller than #{MAX_AUDIO_BYTES / 1.megabyte}MB")
     end
   end
 

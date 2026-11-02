@@ -6,6 +6,8 @@ import {
   ListMusic,
   LogOut,
   Maximize,
+  Mic,
+  MicOff,
   MicVocal,
   Minimize,
   Pause,
@@ -24,8 +26,8 @@ import TvButton from "@/components/karaoke/tv/TvButton.vue"
 import TvPanel from "@/components/karaoke/tv/TvPanel.vue"
 import TvShell from "@/components/karaoke/tv/TvShell.vue"
 import TvStepper from "@/components/karaoke/tv/TvStepper.vue"
-import { useKeyShift } from "@/composables/useKeyShift"
 import { useMediaClock } from "@/composables/useMediaClock"
+import { useTrackFx } from "@/composables/useTrackFx"
 import {
   isButtonTarget,
   isTypingTarget,
@@ -34,6 +36,8 @@ import {
 import { parseBody } from "@/lib/chordSheet"
 import { lineBeatsFor } from "@/lib/lineTiming"
 import { fromChordSheet, fromPhrasing } from "@/lib/lyricDisplay"
+import { untapped, withCurrentTokens } from "@/lib/phrasing"
+import { timelineFromSync } from "@/lib/syncedSheet"
 import { buildTimeline, guideAt, remapElapsed } from "@/lib/tempoGuide"
 import { transposeToken } from "@/lib/transpose"
 import {
@@ -43,7 +47,7 @@ import {
   stepValue,
   useTvPrefs,
 } from "@/lib/tvPrefs"
-import { songs as songsRoutes, songsTimings } from "@/routes"
+import { songs as songsRoutes, songsPhrasings, songsTimings } from "@/routes"
 import type { Song } from "@/types"
 
 const props = defineProps<{
@@ -94,17 +98,143 @@ const usesAudio = computed(
       currentSong.value.phrasing
     ),
 )
+// The recording plays in the karaoke view only. In the chord sheet view an
+// audio-synced song is silent: the sheet scrolls line by line at the
+// timing tapped out in its karaoke sync (lib/syncedSheet.ts), for a band
+// or singer reading along live, at the Tempo set here.
+const audioActive = computed(() => usesAudio.value && view.value === "karaoke")
+const syncedSheet = computed(() => usesAudio.value && view.value === "sheet")
+
+// A song with its audio uploaded but no finished karaoke sync follows the
+// tempo guide instead -- say why, since that's also why there's no Vocals
+// control for it.
+const syncNote = computed(() => {
+  const song = currentSong.value
+  if (!song || usesAudio.value || !song.has_audio) return null
+  if (!song.phrasing) {
+    return "This song has its recording uploaded but no karaoke sync yet, so it's following the tempo guide. Make one on its Karaoke sync page to play the recording here, with Vocals."
+  }
+  const left = untapped(song.phrasing)
+  if (!left.count) return null
+  const what = `${left.count} ${left.unit}${left.count === 1 ? "" : "s"}`
+  return `This song's karaoke sync still has ${what} to tap, so it's following the tempo guide. Finish ${left.count === 1 ? "it" : "them"} on the Karaoke sync page to play the recording here, with Vocals.`
+})
+function finishSync() {
+  const song = currentSong.value
+  if (song) router.visit(songsPhrasings.show({ song_id: song.slug }).url)
+}
 
 // Audio
 const audioEl = ref<HTMLAudioElement | null>(null)
 const { time: audioTime, playing: audioPlaying } = useMediaClock(audioEl)
 const audioEnded = ref(false)
 const audioSemitones = computed(() => (usesAudio.value ? semitones.value : 0))
-const keyShift = useKeyShift(audioEl, audioSemitones)
+
+/* ---- vocals: the singer's own voice over the band ----
+   On: the original recording. Guide: its lead vocal turned well down, so
+   the melody's still faintly there to follow. Off: the song's uploaded
+   minus-one track if it has one (cleanest), otherwise the lead vocal
+   masked out of the original (lib/vocalMask.ts). */
+type VocalMode = "on" | "guide" | "off"
+const VOCAL_MODES: VocalMode[] = ["on", "guide", "off"]
+const VOCAL_LABELS: Record<VocalMode, string> = {
+  on: "On",
+  guide: "Guide",
+  off: "Off",
+}
+const GUIDE_LEVEL = 0.3
+const vocalMode = useLocalStorage<VocalMode>("chordstage:vocals", "on", persist)
+const instrumentalUrl = computed(
+  () => currentSong.value?.instrumental_url ?? null,
+)
+const useInstrumental = computed(
+  () => usesAudio.value && vocalMode.value === "off" && !!instrumentalUrl.value,
+)
+// Seconds the minus-one runs ahead of the original (from the sync editor).
+const playOffset = computed(() =>
+  useInstrumental.value
+    ? Number(currentSong.value?.phrasing?.instrumentalOffset) || 0
+    : 0,
+)
+const audioSrc = computed(() => {
+  const song = currentSong.value
+  if (!usesAudio.value || !song) return undefined
+  return (
+    (useInstrumental.value ? instrumentalUrl.value : song.audio_url) ??
+    undefined
+  )
+})
+const vocalLevel = computed(() => {
+  if (!usesAudio.value || useInstrumental.value) return 1
+  if (vocalMode.value === "off") return 0
+  return vocalMode.value === "guide" ? GUIDE_LEVEL : 1
+})
+const fx = useTrackFx(audioEl, audioSemitones, vocalLevel)
+const vocalHow = computed(() => {
+  if (vocalMode.value === "on") return "The original recording."
+  if (useInstrumental.value) return "Playing the song's minus-one track."
+  if (!fx.vocalSupported.value) {
+    return "This browser can't mask the vocal. Upload a minus-one track for this song instead."
+  }
+  if (fx.mono.value) {
+    return "This recording is mono, so its vocal can't be masked. Upload a minus-one track for this song instead."
+  }
+  return vocalMode.value === "guide"
+    ? "The lead vocal is turned well down, so the melody is still faintly there to follow."
+    : "The lead vocal is masked out of the recording. Works best on studio mixes; a minus-one track is cleaner."
+})
+function cycleVocals() {
+  const i = VOCAL_MODES.indexOf(vocalMode.value)
+  vocalMode.value = VOCAL_MODES[(i + 1) % VOCAL_MODES.length]
+}
+
+// Switching between the original and the minus-one mid-song carries on
+// from the same spot in the song (and keeps playing if it was).
+const pendingSeek = ref<{ time: number; play: boolean } | null>(null)
+const heldTime = ref<number | null>(null)
+watch(
+  () => [currentSong.value?.id, audioSrc.value, playOffset.value] as const,
+  ([id, src, offset], [oldId, oldSrc, oldOffset]) => {
+    const el = audioEl.value
+    if (!el || id !== oldId || !src || !oldSrc) return
+    const songTime = el.currentTime - (oldOffset ?? 0)
+    if (src === oldSrc) {
+      // Same file, the offset changed: just move.
+      el.currentTime = Math.max(0, songTime + offset)
+      return
+    }
+    pendingSeek.value = {
+      time: Math.max(0, songTime + offset),
+      play: !el.paused && !el.ended,
+    }
+    heldTime.value = songTime
+  },
+)
+function onLoadedMetadata() {
+  applyPlaybackRate()
+  const el = audioEl.value
+  const seek = pendingSeek.value
+  if (!el || !seek) return
+  pendingSeek.value = null
+  el.currentTime = seek.time
+  heldTime.value = null
+  if (seek.play) void el.play().catch(() => {})
+}
 
 // Tempo guide clock. It starts at minus the count-in, so the count-in is
 // just the clock running up to the song's own zero.
-const secPerBeat = computed(() => 60 / (bpm.value > 0 ? bpm.value : 100))
+// The karaoke sync's own tempo (found from its line taps), for the synced
+// sheet's BPM and count-in.
+const syncBpm = computed(() => {
+  const song = currentSong.value
+  if (!usesAudio.value || !song) return null
+  return Number(song.phrasing?.sync?.bpm) || Number(song.tempo) || null
+})
+const secPerBeat = computed(() =>
+  syncedSheet.value
+    ? 60 / (syncBpm.value || 100)
+    : 60 / (bpm.value > 0 ? bpm.value : 100),
+)
 const origin = computed(() => -countIn.value * secPerBeat.value)
 // The song's own line lengths (its Line timing), where it has them.
 function lineBeatsAt(perLine: number) {
@@ -115,7 +245,21 @@ const hasLineTiming = computed(() => lineBeats.value.some((b) => b != null))
 const timeline = computed(() =>
   buildTimeline(blocks.value, bpm.value, beatsPerLine.value, lineBeats.value),
 )
-const tempoEnd = computed(() => timeline.value.totalDuration + 4)
+// The sheet timed by the karaoke sync (in the recording's seconds).
+const syncTimeline = computed(() => {
+  const song = currentSong.value
+  if (!usesAudio.value || !song?.phrasing) return null
+  return timelineFromSync(blocks.value, song.phrasing, 4 * secPerBeat.value)
+})
+const tempoEnd = computed(
+  () =>
+    (syncedSheet.value && syncTimeline.value
+      ? syncTimeline.value.totalDuration
+      : timeline.value.totalDuration) + 4,
+)
+// The synced sheet runs on the recording's clock, sped up or slowed down
+// by the Tempo; the tempo guide's own timeline is already at its BPM.
+const clockRate = computed(() => (syncedSheet.value ? playbackRate.value : 1))
 const tempoTime = ref(0)
 const tempoPlaying = ref(false)
 let tempoRaf: number | null = null
@@ -124,7 +268,7 @@ let tempoLast: number | null = null
 function tempoFrame(ts: number) {
   if (!tempoPlaying.value) return
   if (tempoLast != null) {
-    tempoTime.value += (ts - tempoLast) / 1000
+    tempoTime.value += ((ts - tempoLast) / 1000) * clockRate.value
     if (tempoTime.value >= tempoEnd.value) {
       tempoTime.value = tempoEnd.value
       stopTempo()
@@ -150,7 +294,9 @@ function stopTempo() {
 /* ---- what the stage shows ---- */
 const track = computed(() => {
   const song = currentSong.value
-  if (usesAudio.value && song?.phrasing) return fromPhrasing(song.phrasing)
+  if (usesAudio.value && song?.phrasing) {
+    return fromPhrasing(withCurrentTokens(song.phrasing))
+  }
   return fromChordSheet(blocks.value, {
     bpm: bpm.value,
     beatsPerLine: beatsPerLine.value,
@@ -162,13 +308,14 @@ const track = computed(() => {
 })
 const time = computed(() => {
   if (!usesAudio.value) return tempoTime.value
-  return audioEnded.value ? Infinity : audioTime.value
+  if (heldTime.value != null) return heldTime.value
+  return audioEnded.value ? Infinity : audioTime.value - playOffset.value
 })
 const playing = computed(() =>
-  usesAudio.value ? audioPlaying.value : tempoPlaying.value,
+  audioActive.value ? audioPlaying.value : tempoPlaying.value,
 )
 const atStart = computed(() =>
-  usesAudio.value ? audioTime.value <= 0.05 : tempoTime.value <= origin.value,
+  audioActive.value ? audioTime.value <= 0.05 : tempoTime.value <= origin.value,
 )
 
 const stageHint = computed(() => {
@@ -178,17 +325,20 @@ const stageHint = computed(() => {
   return next ? `Up next: ${next.title}` : null
 })
 
-// The chord sheet view's ball and word fill follow the tempo guide; with
-// an audio sync the karaoke view is where the timing lives (the sheet can
-// still auto-scroll past its reading line).
-const sheetGuide = computed(() =>
-  usesAudio.value ? null : guideAt(timeline.value.lines, tempoTime.value),
-)
+// The chord sheet view's ball, word fill and glide follow the tempo guide,
+// or for an audio-synced song, its karaoke sync's timing.
+const sheetGuide = computed(() => {
+  if (usesAudio.value) {
+    return syncTimeline.value
+      ? guideAt(syncTimeline.value.lines, tempoTime.value)
+      : null
+  }
+  return guideAt(timeline.value.lines, tempoTime.value)
+})
 
 /* ---- transport ---- */
 function play() {
-  if (usesAudio.value) {
-    // An audio song's sheet can keep auto-scrolling while the track plays.
+  if (audioActive.value) {
     audioEnded.value = false
     void audioEl.value?.play().catch(() => {})
   } else {
@@ -196,7 +346,7 @@ function play() {
   }
 }
 function pause() {
-  if (usesAudio.value) audioEl.value?.pause()
+  if (audioActive.value) audioEl.value?.pause()
   else stopTempo()
 }
 function togglePlay() {
@@ -204,7 +354,7 @@ function togglePlay() {
   else play()
 }
 function restart() {
-  if (usesAudio.value) {
+  if (audioActive.value) {
     audioEnded.value = false
     if (audioEl.value) audioEl.value.currentTime = 0
   } else {
@@ -237,6 +387,9 @@ function resetForSong() {
 /* ---- tempo: adjustable mid-song without losing your place ---- */
 const BPM_RANGE = { min: 40, max: 240, step: 2 }
 const RATE_RANGE = { min: 0.7, max: 1.3, step: 0.05 }
+// The silent synced sheet can go further either way (a band rehearsing
+// slowly, say); steps of 2 BPM when the sync has a tempo.
+const SHEET_RATE = { min: 0.5, max: 1.5, step: 0.05 }
 const playbackRate = ref(1)
 
 // Changes the tempo guide's speed. The clock is rescaled so the highlight
@@ -265,25 +418,41 @@ function setTempo(nextBpm: number, nextBeatsPerLine = beatsPerLine.value) {
 // pitch where it is, and the lyrics follow the audio clock, so they stay
 // in sync at any speed.
 function nudgeTempo(dir: 1 | -1) {
-  if (usesAudio.value) {
+  if (syncedSheet.value) {
+    const base = syncBpm.value
+    const next = base
+      ? (Math.round(base * playbackRate.value) + dir * BPM_RANGE.step) / base
+      : playbackRate.value + dir * SHEET_RATE.step
+    playbackRate.value = Math.min(
+      SHEET_RATE.max,
+      Math.max(SHEET_RATE.min, next),
+    )
+  } else if (usesAudio.value) {
     playbackRate.value = stepValue(playbackRate.value, dir, RATE_RANGE)
   } else {
     setTempo(bpm.value + dir * BPM_RANGE.step)
   }
 }
-const tempoLabel = computed(() =>
-  usesAudio.value
-    ? `${Math.round(playbackRate.value * 100)}%`
-    : String(bpm.value),
+const tempoInBpm = computed(
+  () => !usesAudio.value || (syncedSheet.value && !!syncBpm.value),
 )
+const tempoLabel = computed(() => {
+  if (syncedSheet.value && syncBpm.value) {
+    return String(Math.round(syncBpm.value * playbackRate.value))
+  }
+  return usesAudio.value
+    ? `${Math.round(playbackRate.value * 100)}%`
+    : String(bpm.value)
+})
+const rateRange = computed(() => (syncedSheet.value ? SHEET_RATE : RATE_RANGE))
 const canSlowDown = computed(() =>
   usesAudio.value
-    ? playbackRate.value > RATE_RANGE.min + 1e-6
+    ? playbackRate.value > rateRange.value.min + 1e-6
     : bpm.value > BPM_RANGE.min,
 )
 const canSpeedUp = computed(() =>
   usesAudio.value
-    ? playbackRate.value < RATE_RANGE.max - 1e-6
+    ? playbackRate.value < rateRange.value.max - 1e-6
     : bpm.value < BPM_RANGE.max,
 )
 
@@ -309,19 +478,19 @@ const KEY_RANGE = 6
 const keyLabel = computed(() => {
   const st = semitones.value
   const songKey = currentSong.value?.key
-  if (songKey && !usesAudio.value) {
+  if (songKey && !audioActive.value) {
     const k = transposeToken(songKey, st, preferFlat.value)
     return st ? `${k} (${signed(st)})` : k
   }
   return st ? signed(st) : "Orig"
 })
 const keyDisabled = computed(
-  () => usesAudio.value && (!keyShift.supported.value || keyShift.failed.value),
+  () => audioActive.value && (!fx.supported.value || fx.failed.value),
 )
 const keyTitle = computed(() =>
   keyDisabled.value
     ? "Changing an audio track's key needs the app opened over https (or on localhost)"
-    : usesAudio.value
+    : audioActive.value
       ? "Shifts the backing track's pitch without changing its tempo"
       : "Transposes the chords",
 )
@@ -361,7 +530,7 @@ const scrolling = ref(false)
 // teleprompter). Its speed is the Tempo. Free scrolling (pixels per
 // second) is for audio-synced songs, or when chosen in Settings.
 const songPaced = computed(
-  () => !usesAudio.value && scrollPace.value === "song",
+  () => (!usesAudio.value || syncedSheet.value) && scrollPace.value === "song",
 )
 const sheetBall = ref(true)
 const scrollActive = computed(() =>
@@ -379,8 +548,8 @@ function toggleScroll() {
     return
   }
   if (scrolling.value) return stopScroll()
-  // The tempo guide already scrolls to follow its highlight.
-  if (!usesAudio.value) stopTempo()
+  // The song-paced clock already scrolls to follow its highlight.
+  if (!audioActive.value) stopTempo()
   scrolling.value = true
 }
 function stopScroll() {
@@ -431,12 +600,22 @@ const statusText = computed(() => {
   if (props.songs.length > 1) {
     parts.push(`Song ${currentIndex.value + 1} of ${props.songs.length}`)
   }
-  if (!usesAudio.value) {
+  if (syncedSheet.value) {
+    parts.push(
+      syncBpm.value
+        ? `Karaoke sync timing · ${tempoLabel.value} BPM`
+        : `Karaoke sync timing · ${tempoLabel.value} speed`,
+    )
+  } else if (!usesAudio.value) {
     parts.push(`Tempo guide · ${bpm.value} BPM`)
     if (hasLineTiming.value) parts.push("line timing")
+    if (syncNote.value) parts.push("karaoke sync unfinished")
   } else if (playbackRate.value !== 1) {
     parts.push(`Audio sync · ${Math.round(playbackRate.value * 100)}% speed`)
   } else parts.push("Audio sync")
+  if (audioActive.value && vocalMode.value !== "on") {
+    parts.push(vocalMode.value === "guide" ? "guide vocal" : "vocals off")
+  }
   return parts.join(" · ")
 })
 
@@ -516,6 +695,10 @@ function onKeydown(e: KeyboardEvent) {
     case "f":
     case "F":
       return void fullscreen.toggle()
+    case "m":
+    case "M":
+      if (audioActive.value) cycleVocals()
+      return
   }
 }
 
@@ -523,6 +706,34 @@ function onKeydown(e: KeyboardEvent) {
 // (new) top, count-in included.
 watch(origin, (o, old) => {
   if (!tempoPlaying.value && tempoTime.value <= old) tempoTime.value = o
+})
+
+// Switching views mid-song carries on from the same spot: the karaoke
+// view's recording hands over to the sheet's silent sync clock and back.
+watch(view, (v, old) => {
+  if (!usesAudio.value || v === old) return
+  const el = audioEl.value
+  if (v === "sheet") {
+    const wasPlaying = audioPlaying.value
+    const t = el ? el.currentTime - playOffset.value : 0
+    el?.pause()
+    sheetBall.value = true
+    tempoTime.value = el && t > 0.05 ? t : origin.value
+    if (wasPlaying) startTempo()
+  } else {
+    const wasPlaying = tempoPlaying.value
+    const t = tempoTime.value
+    stopTempo()
+    playbackRate.value = Math.min(
+      RATE_RANGE.max,
+      Math.max(RATE_RANGE.min, playbackRate.value),
+    )
+    if (el) {
+      audioEnded.value = false
+      el.currentTime = Math.max(0, t) + playOffset.value
+      if (wasPlaying) void el.play().catch(() => {})
+    }
+  }
 })
 
 watch(usesAudio, (audio, wasAudio) => {
@@ -566,10 +777,10 @@ onBeforeUnmount(() => {
         ref="audioEl"
         class="hidden"
         preload="auto"
-        :src="usesAudio ? (currentSong.audio_url ?? undefined) : undefined"
+        :src="audioSrc"
         @ended="audioEnded = true"
         @seeking="audioEnded = false"
-        @loadedmetadata="applyPlaybackRate"
+        @loadedmetadata="onLoadedMetadata"
       ></audio>
 
       <LyricStage
@@ -644,17 +855,19 @@ onBeforeUnmount(() => {
           v-if="sheetTempo"
           label="Tempo"
           :value="tempoLabel"
-          :unit="usesAudio ? undefined : 'bpm'"
+          :unit="tempoInBpm ? 'bpm' : undefined"
           dec-label="Slower"
           inc-label="Faster"
           :can-dec="canSlowDown"
           :can-inc="canSpeedUp"
           :title="
-            usesAudio
-              ? 'Playback speed of the track; the pitch stays put (, and .)'
-              : view === 'sheet'
-                ? 'The song\'s pace: the sheet moves on as each line ends (, and .)'
-                : 'Tempo guide speed, adjustable mid-song without losing your place (, and .)'
+            syncedSheet
+              ? 'The karaoke sync\'s pace, sped up or slowed down: the sheet moves on as each line ends (, and .)'
+              : usesAudio
+                ? 'Playback speed of the track; the pitch stays put (, and .)'
+                : view === 'sheet'
+                  ? 'The song\'s pace: the sheet moves on as each line ends (, and .)'
+                  : 'Tempo guide speed, adjustable mid-song without losing your place (, and .)'
           "
           @dec="nudgeTempo(-1)"
           @inc="nudgeTempo(1)"
@@ -696,6 +909,15 @@ onBeforeUnmount(() => {
           @click="toggleView"
         />
         <TvButton
+          v-if="view === 'karaoke' && usesAudio"
+          :icon="vocalMode === 'on' ? Mic : MicOff"
+          :label="`Vocals: ${VOCAL_LABELS[vocalMode]}`"
+          title="Lead vocal: On, Guide (quiet) or Off, to sing it yourself (M)"
+          toggle
+          :active="vocalMode !== 'on'"
+          @click="cycleVocals"
+        />
+        <TvButton
           v-if="view === 'karaoke' && !usesAudio"
           :icon="Guitar"
           label="Chords"
@@ -726,6 +948,14 @@ onBeforeUnmount(() => {
 
     <template #panel>
       <TvPanel title="Stage settings" @close="settingsOpen = false">
+        <template v-if="syncNote">
+          <p class="settings-note settings-note--warn">{{ syncNote }}</p>
+          <TvButton
+            v-if="currentSong?.owned"
+            label="Finish karaoke sync"
+            @click="finishSync"
+          />
+        </template>
         <template v-if="!usesAudio">
           <TvStepper
             label="Tempo"
@@ -758,12 +988,45 @@ onBeforeUnmount(() => {
             @inc="countIn = Math.min(8, countIn + 1)"
           />
         </template>
-        <p v-else class="settings-note">
-          This song follows its uploaded audio track, so the tempo guide
-          settings don&rsquo;t apply &mdash; use Tempo in the controls to speed
-          the track up or slow it down.
-        </p>
-        <template v-if="!usesAudio">
+        <template v-else-if="syncedSheet">
+          <p class="settings-note">
+            In the sheet view the recording doesn&rsquo;t play: the sheet
+            scrolls line by line at the timing tapped out in this song&rsquo;s
+            karaoke sync{{ syncBpm ? ` (${Math.round(syncBpm)} BPM)` : "" }}.
+            Tempo speeds it up or slows it down; Play shows the ball, Scroll a
+            clean teleprompter. The Karaoke view plays the recording.
+          </p>
+          <TvStepper
+            label="Count-in"
+            :value="countIn ? `${countIn} beats` : 'Off'"
+            dec-label="Fewer"
+            inc-label="More"
+            :can-dec="countIn > 0"
+            :can-inc="countIn < 8"
+            @dec="countIn = Math.max(0, countIn - 1)"
+            @inc="countIn = Math.min(8, countIn + 1)"
+          />
+        </template>
+        <template v-else>
+          <p class="settings-note">
+            This song plays its recording, synced to its karaoke sync, so the
+            tempo guide settings don&rsquo;t apply &mdash; use Tempo in the
+            controls to speed the track up or slow it down.
+          </p>
+          <div class="settings-row" role="group" aria-label="Lead vocal">
+            <span class="settings-label">Vocals</span>
+            <TvButton
+              v-for="mode in VOCAL_MODES"
+              :key="mode"
+              :label="VOCAL_LABELS[mode]"
+              toggle
+              :active="vocalMode === mode"
+              @click="vocalMode = mode"
+            />
+          </div>
+          <p class="settings-note">{{ vocalHow }}</p>
+        </template>
+        <template v-if="!usesAudio || syncedSheet">
           <TvButton
             label="Scroll at song pace"
             title="The sheet's Scroll follows the song's tempo and line timing; turn off to scroll at a free speed"
@@ -771,7 +1034,7 @@ onBeforeUnmount(() => {
             :active="scrollPace === 'song'"
             @click="toggleScrollPace"
           />
-          <p class="settings-note">
+          <p v-if="!usesAudio" class="settings-note">
             {{
               hasLineTiming
                 ? "This song has its own line timing, so each line lasts as long as it really does."
@@ -781,13 +1044,13 @@ onBeforeUnmount(() => {
             }}
           </p>
           <TvButton
-            v-if="currentSong?.owned"
+            v-if="currentSong?.owned && !usesAudio"
             label="Edit line timing"
             @click="editLineTiming"
           />
         </template>
         <TvStepper
-          v-if="usesAudio || !songPaced"
+          v-if="!songPaced"
           label="Scroll speed"
           :value="scrollLabel"
           dec-label="Slower"
@@ -832,6 +1095,21 @@ onBeforeUnmount(() => {
 .stage-empty__sub {
   color: var(--tv-dim);
   font-size: 0.6em;
+}
+.settings-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1vh;
+}
+.settings-label {
+  min-width: 8vh;
+  color: var(--tv-dim);
+  font-size: max(16px, 2.4vh);
+  font-weight: 800;
+}
+.settings-note.settings-note--warn {
+  color: #ffe600;
 }
 .settings-note {
   max-width: 60vh;

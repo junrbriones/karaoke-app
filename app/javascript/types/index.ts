@@ -59,6 +59,12 @@ export interface ShareableGroup {
   name: string
 }
 
+export interface UploadedFile {
+  filename: string
+  byte_size: number
+  uploaded_at: string
+}
+
 export interface Song {
   id: number
   title: string
@@ -72,8 +78,14 @@ export interface Song {
   owned: boolean
   owner_name?: string | null
   has_audio: boolean
+  has_instrumental?: boolean
   phrasing_ready: boolean
   audio_url?: string | null
+  // Owner only: the uploaded track, saved with the song.
+  audio_file?: UploadedFile | null
+  // An optional "minus-one": the song without its lead vocal.
+  instrumental_url?: string | null
+  instrumental_file?: (UploadedFile & { same_as_audio?: boolean }) | null
   phrasing?: Phrasing | null
   line_timing?: LineTiming | null
   shares?: SongShareRef[]

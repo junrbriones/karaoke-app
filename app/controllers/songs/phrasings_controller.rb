@@ -14,6 +14,9 @@ module Songs
 
     def update
       @song.audio.attach(params[:audio]) if params[:audio].present?
+      # The optional minus-one (the song without its lead vocal).
+      @song.instrumental.attach(params[:instrumental]) if params[:instrumental].present?
+      @song.instrumental.purge_later if params[:remove_instrumental].present? && @song.instrumental.attached?
 
       if params.key?(:phrasing)
         parsed = parse_phrasing(params[:phrasing])
@@ -24,14 +27,26 @@ module Songs
         @song.phrasing = parsed
       end
 
+      # A line-by-line sync finds the song's tempo from the taps; the editor
+      # can send it along to become the song's tempo.
+      @song.tempo = params[:tempo].to_i if params[:tempo].present? && params[:tempo].to_i.between?(20, 300)
+
       if @song.save
-        redirect_to song_phrasing_path(@song), notice: "Phrasing saved"
+        redirect_to song_phrasing_path(@song), notice: saved_notice
       else
         redirect_to song_phrasing_path(@song), inertia: { errors: @song.errors }
       end
     end
 
     private
+
+    def saved_notice
+      if params[:instrumental].present? then "Minus-one track saved"
+      elsif params[:remove_instrumental].present? then "Minus-one track removed"
+      elsif params[:audio].present? then "Audio saved"
+      else "Karaoke sync saved"
+      end
+    end
 
     def set_owned_song
       @song = Current.user.songs.find_by!(slug: params[:song_id])

@@ -308,7 +308,7 @@ above the lines a badge for the current section or duet part.
 sits at the bottom: Exit, Prev/Next song, Restart, Play/Pause, Key -/+,
 Tempo -/+ (karaoke view, and the chord sheet view of a tempo-guide song)
 or auto-scroll Speed -/+ (the sheet of an audio-synced song),
-Text -/+, Sheet/Karaoke (switch views), Chords (karaoke view) or Scroll
+Text -/+, Sheet/Karaoke (switch views), Chords (karaoke view; Vocals for an audio-synced song) or Scroll
 (auto-scroll on/off, sheet view), and Settings (beats per line, count-in,
 flats vs. sharps, full screen). While a song plays the dock fades out after
 4 seconds and the cursor hides; any mouse movement, touch, or button press
@@ -361,8 +361,8 @@ tick in the left margin), and the song moves past it:
 Keyboard shortcuts: `Space`/`P` play/pause, `R`/`Home` restart, `,`/`.`
 slower/faster (the tempo, or the free scroll speed),
 `N`/`Page Down` next song, `Page Up` previous song, `[`/`]` key down/up,
-`-`/`+` text size, `K` or `V` karaoke/sheet view, `C` chords, `S`
-scroll on/off (sheet view), `F` full screen, `Esc` hide the controls.
+`-`/`+` text size, `K` or `V` karaoke/sheet view, `C` chords, `M` vocals
+on/guide/off (audio-synced songs), `S` scroll on/off (sheet view), `F` full screen, `Esc` hide the controls.
 
 **Key change.** For a tempo-guide song, Key -/+ transposes the chords (and
 shows the new key, e.g. "A (+2)"). For a song with an audio sync, it
@@ -445,9 +445,12 @@ for you:
 - A line with just `[Instrumental]` marks a rest: no lyrics, just a "take a
   breath" beat with a progress bar, shown between two sung screens for
   exactly as long as the gap between them.
-- Hyphenate a word (`a-ma-zing`) to split it into separate syllable tokens,
-  each tapped and highlighted independently, so the color sweep can move
-  across the word instead of lighting it up all at once.
+- A hyphenated word (`Gabi-gabi`, `taga-Frisco`) keeps its hyphen on
+  screen, and each part is timed as its own word &mdash; tapped (in word
+  mode) and highlighted separately.
+- Split a long word with `|` (`a|ma|zing`) to break it into syllables, each
+  tapped and highlighted independently, so the color sweep can move across
+  the word instead of lighting it up all at once; the `|` isn't shown.
 
 Click **Build screens** to turn the current text into a starting set of
 screens (it defaults to the song's existing lyrics, pulled out of the
@@ -457,17 +460,81 @@ later keeps any timestamps you'd already tapped, matched back up by
 position.
 
 **Tapping the sync.** Upload the song's actual audio (mp3/wav/ogg/m4a/aac/
-flac, up to 30MB) in the box at the top. Then, with the audio loaded, click
-**Start tapping** and play the track: pressing `Space` at the exact moment
-each word or syllable begins records that timestamp against the real
-`currentTime` of the `<audio>` element (not the throttled `timeupdate`
-event), so taps land at real millisecond precision. `←`/Backspace undoes
-the last tap, `→` skips a word without timing it, `Esc` stops tapping. Made
-a mistake partway through? Click any word in the **Tapped times** list to
-clear every tap from that point on and rewind the audio to just before it,
-so you can redo a stretch without starting over. A song is only "ready" for
-Stage Mode once every word has a tapped time; **Save phrasing** works at
-any point, so a half-tapped draft is safe to leave and come back to.
+flac, up to 30MB) in the box at the top &mdash; it uploads as soon as you
+pick the file and is saved with the song, so it loads by itself every time
+after that (the box shows the saved file's name, size and upload date;
+**Replace audio…** swaps it, keeping your taps). Then pick how to sync
+under **How to sync**. Taps are read from the real `currentTime` of the
+`<audio>` element (not the throttled `timeupdate` event), so they land at
+real millisecond precision.
+
+**Saving.** **Save sync** (or `Ctrl+S` / `⌘S`) saves the lyrics with
+their timing marks, the taps, and the tempo and snapping; it works at any
+point, so a half-tapped draft is safe to leave and come back to. The save
+bar shows "Unsaved changes" until you do, and leaving or reloading the page
+with unsaved changes asks first.
+
+*Tap each line* (the default, and the easier one): click **Start tapping**
+and press `Space` (or the big pad) the moment each **line** starts.
+
+- Tap at the start of each `[Instrumental]` break too, and once more where
+  the last line ends. A line otherwise lasts until the next tap; to mark
+  exactly where it ends (a line followed by a breath or a gap), keep the
+  key held while it's sung and let go when it ends.
+- **Tempo.** Lines nearly always start on a beat, so a steady beat fitted
+  through the taps gives the song's tempo, found automatically from the
+  first four taps on (using the song's tempo, if it has one, as a hint).
+  Lines on bar lines fit several tempos about equally well, so the best
+  few are offered as **Best matches** to pick from, with ½×/2× and a typed
+  BPM for anything else; it tells you how closely your taps sit on the beat.
+  Saving can also make it the song's tempo (used by the tempo guide and
+  Line timing).
+- **Word placement.** Each word is sung for as long as its syllables take
+  at the **Syllable pace** &mdash; Normal is ½ beat a syllable (Fast ¼,
+  Slow 1) &mdash; from the line's tap on, so a line ends when its words do
+  and the rest of the time until the next line is a breath; the highlight
+  waits there instead of dragging. A line sung faster than that pace is
+  squeezed to fit, and a line whose tap you held is sung right up to where
+  you let go. ("Fill the line" instead spreads each line's words over the
+  whole time to the next tap, as before; it's also what's used until
+  there's a tempo.) The words then snap to the nearest beat, ½ beat
+  (default) or ¼ beat, so the sweep moves in time with the music. If a line has more
+  words than grid slots it uses a finer grid, then no snapping. Snapping
+  can be turned off (for a live recording that drifts).
+- **Timing marks** in the lyrics fine-tune it, and never show on screen:
+  `~` after a word or syllable holds it one syllable longer per `~`
+  (`ma-hal~~ kita`); `/` is a pause of one syllable per `/`, and the
+  highlight waits (`ikaw / at ako`, or `ikaw/`; at the start of a line,
+  `// Oh` delays the first word after the line's tap); `^` makes a word
+  quick, half as long per `^`, so the highlight moves on to the next word
+  sooner (`Si^ Annie`; `Si^^` quicker still, `^^^` quickest) &mdash; with
+  snapping on, a quick word may hand over between grid lines (a ¼ beat for
+  `^` on a ½-beat grid, ⅛ for `^^`). Changes to words and marks
+  apply as you type &mdash; the practice screen updates right away and
+  every tap is kept. Adding or removing lines or screens waits for **Build
+  screens** (taps are then matched up line by line from the top).
+- The **Line taps** list shows every tap: &#9654; plays from just before a
+  line, &minus;/+ moves a tap by 0.05 s, and **Re-tap** clears the taps
+  from there on and backs up so you can redo just that stretch.
+  `Backspace` undoes the last tap (and backs up a little); `Esc` stops.
+
+Everything is worked out from the line taps, so changing the tempo, the
+snapping or the marks re-places the words instantly, without re-tapping.
+
+*Tap each word*, for exact control: `Space` as each word or syllable
+starts. `←`/Backspace undoes the last tap, `→` skips a word without timing
+it, `Esc` stops. Click any word in the **Tapped times** list to clear every
+tap from that point on and rewind the audio to just before it. Switching
+from line to word mode starts from the word times the line taps placed, so
+you can line-sync the song and then re-tap only the words that need it
+(switching back re-places them from the line taps).
+
+A song is only "ready" for Stage Mode once every line (line mode) or every
+word (word mode) is tapped. Until then Stage Mode follows the tempo guide
+(and says so: "karaoke sync unfinished" in its status, with a note in
+Settings); the editor's save bar counts what's left, and **Tap the rest**
+jumps to the first untapped line and taps only the gaps. The sync is stored on the song as `phrasing`,
+including how it was made (`sync`: mode, tempo, beat position, snapping).
 
 The editor's practice screen is the actual Stage Mode renderer in a 16:9
 box, so what you see while tapping is exactly what the singer will see on
@@ -477,9 +544,62 @@ the TV.
 phrasing plays from its real audio track instead of the tempo guide: Play
 starts the track, the sweep follows your tapped timestamps, and Key -/+
 pitch-shifts the track (see [Stage Mode](#stage-mode-the-tv--kiosk-display)).
-The Sheet view still shows the full chord sheet, without a word highlight,
-while the audio plays. A setlist mixes freely: each song uses its own
+The recording plays in the **Karaoke** view only. The **Sheet** view of an
+audio-synced song is silent and follows the karaoke sync instead: the chord
+sheet scrolls line by line, with the ball on each word, exactly as the song
+was tapped out (`lib/syncedSheet.ts` matches the sync's lines to the
+sheet's by their words, in order; chord-only lines and any line that
+doesn't match share out the time around them). It starts at the sync's
+tempo (found from the line taps) and Tempo -/+ moves it in 2 BPM steps
+(50&ndash;150%) without losing your place; Play shows the ball, Scroll is
+the clean song-paced teleprompter, and there's a count-in. Switching
+between Karaoke and Sheet mid-song carries on from the same spot &mdash; the
+recording hands over to the sheet's silent clock and back, at the same
+speed. A setlist mixes freely: each song uses its own
 audio sync if it's ready and the tempo guide otherwise.
+
+### Vocals: singing over the band
+
+For a song with a finished audio sync (every line or word tapped), Stage
+Mode's karaoke dock has a **Vocals** button (also in Settings, and `M` on a keyboard) that cycles:
+
+- **On** &mdash; the original recording.
+- **Guide** &mdash; the lead vocal turned well down (about &minus;10 dB),
+  so the melody is still faintly there to follow.
+- **Off** &mdash; the singer's voice only: the song's **minus-one** track
+  if it has one, otherwise the lead vocal masked out of the original.
+
+It can be changed mid-song without losing your place (switching to and
+from a minus-one carries on from the same spot), works with Key and
+Tempo, and is remembered per device.
+
+**Masking** (`lib/vocalMask.ts`) is the classic karaoke "center cancel",
+done live in the browser with Web Audio &mdash; no upload or processing
+needed, and it works over plain http too. A studio mix puts the lead vocal
+dead center (the same in both channels), so the vocal range (about
+160 Hz&ndash;8 kHz) of the center is removed, while the center's bass and
+kick, its cymbals and air, and everything panned to the sides are kept.
+Measured on test tones: a centered 1 kHz voice drops ~60 dB, 300 Hz ~20 dB,
+3 kHz ~35 dB; bass and cymbals pass unchanged; panned instruments lose
+3&ndash;6 dB. Limits: it can't do anything with a **mono** recording (the
+settings say so when the track turns out to be mono), wide stereo reverb on
+the voice and backing vocals can leave a trace, centered instruments in the
+vocal range are lowered with it, and the masked sound relies on stereo
+playback (through a single mono speaker much of the band cancels out too).
+At Vocals On the original goes straight through, untouched.
+
+**A minus-one track** is cleaner: upload it per song under **Minus-one
+track** on the Karaoke sync page (it's saved with the song like the main
+audio, and can be replaced or removed; a file identical to the main audio
+is refused, since it would still have the vocal). Minus-one files often start a
+little earlier or later than the original, so it's lined up automatically
+after uploading (`lib/alignTracks.ts` matches the drum and bass hits the two
+share, to within ~15 ms) &mdash; or press **Auto-align** &mdash; and can be
+nudged by 0.05 s by ear. **Listen to: Original / Vocals masked /
+Minus-one** plays any of the three in the editor, with the lyrics on the
+same clock, so you can check the alignment (and hear what Vocals Off will
+sound like); tapping works with any of them. The offset is saved with the
+sync as `instrumentalOffset`.
 
 ## When something goes wrong
 

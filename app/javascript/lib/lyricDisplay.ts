@@ -225,7 +225,11 @@ function finalize(
 
 // A KaraFun-style tapped phrasing, synced to the song's audio.
 export function fromPhrasing(phrasing: Phrasing): DisplayTrack {
-  type Ref = { token: DisplayToken; lastInLine: boolean }
+  type Ref = {
+    token: DisplayToken
+    lastInLine: boolean
+    endsAt: number | null // an explicit end (a pause, a line-synced line)
+  }
   const refs: Ref[] = []
 
   const drafts: DraftScreen[] = phrasing.screens.map((screen) => ({
@@ -243,15 +247,23 @@ export function fromPhrasing(phrasing: Phrasing): DisplayTrack {
           end: Infinity,
           chord: null,
         }
-        refs.push({ token, lastInLine: i === line.tokens.length - 1 })
+        refs.push({
+          token,
+          lastInLine: i === line.tokens.length - 1,
+          endsAt: t.end ?? null,
+        })
         return token
       }),
     })),
   }))
 
-  refs.forEach(({ token, lastInLine }, i) => {
+  refs.forEach(({ token, lastInLine, endsAt }, i) => {
     if (!Number.isFinite(token.start)) return
     const next = refs[i + 1]?.token.start ?? Infinity
+    if (endsAt != null && Number.isFinite(endsAt)) {
+      token.end = Math.max(token.start, Math.min(endsAt, next))
+      return
+    }
     const tail = token.start + MAX_TAIL
     const end =
       lastInLine || !Number.isFinite(next) ? Math.min(next, tail) : next
