@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Form } from "@inertiajs/vue3"
 import { LoaderCircle } from "lucide-vue-next"
+import { ref } from "vue"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -16,6 +17,9 @@ defineProps<{
   action: RouteDefinition<"post">
   submitLabel: string
 }>()
+
+// Vouching for the address skips the verification email.
+const verified = ref(false)
 </script>
 
 <template>
@@ -79,12 +83,42 @@ defineProps<{
         />
         <FieldError :errors="errors.password_confirmation" />
       </Field>
+
+      <Field>
+        <label
+          for="verified"
+          class="flex cursor-pointer items-start gap-3 rounded-lg border p-3 text-sm"
+          :class="verified ? 'border-primary bg-primary/5' : ''"
+        >
+          <input
+            id="verified"
+            v-model="verified"
+            name="verified"
+            type="checkbox"
+            value="1"
+            class="accent-primary mt-0.5 size-4"
+          />
+          <span>
+            <span class="font-medium">Mark as verified</span>
+            <span class="text-muted-foreground block text-xs">
+              You know this email address is theirs, so they don&rsquo;t need to
+              confirm it &mdash; no verification email is sent.
+            </span>
+          </span>
+        </label>
+      </Field>
     </FieldGroup>
 
     <p class="text-muted-foreground text-xs">
       Share this password with them directly &mdash; they can change it later
-      from their own account settings. They'll also get an email asking them to
-      verify their address.
+      from their own account settings.
+      <template v-if="verified"
+        >Their account is verified from the start.</template
+      >
+      <template v-else
+        >They'll also get an email asking them to verify their
+        address.</template
+      >
     </p>
 
     <div class="flex gap-3">

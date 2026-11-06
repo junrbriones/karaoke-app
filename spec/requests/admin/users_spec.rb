@@ -60,6 +60,43 @@ RSpec.describe "Admin::Users", type: :request do
       expect(new_user.sessions.count).to eq(0)
     end
 
+    it "sends a verification email to a user the admin didn't mark verified" do
+      sign_in users(:admin)
+      expect {
+        post admin_users_path, params: {
+          name: "New User", email: "new@example.com",
+          password: "Secret1*3*5*", password_confirmation: "Secret1*3*5*"
+        }
+      }.to have_enqueued_mail(UserMailer, :email_verification)
+
+      expect(User.find_by(email: "new@example.com")).not_to be_verified
+    end
+
+    it "marks a user verified when the admin ticks the box, with no email" do
+      sign_in users(:admin)
+      expect {
+        post admin_users_path, params: {
+          name: "New User", email: "new@example.com",
+          password: "Secret1*3*5*", password_confirmation: "Secret1*3*5*",
+          verified: "1"
+        }
+      }.not_to have_enqueued_mail(UserMailer, :email_verification)
+
+      expect(response).to redirect_to(admin_users_path)
+      expect(User.find_by(email: "new@example.com")).to be_verified
+      expect(flash[:notice]).to include("marked as verified")
+    end
+
+    it "treats an unticked box as not verified" do
+      sign_in users(:admin)
+      post admin_users_path, params: {
+        name: "New User", email: "new@example.com",
+        password: "Secret1*3*5*", password_confirmation: "Secret1*3*5*",
+        verified: "0"
+      }
+      expect(User.find_by(email: "new@example.com")).not_to be_verified
+    end
+
     it "rejects an invalid user" do
       sign_in users(:admin)
       expect {

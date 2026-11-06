@@ -25,12 +25,19 @@ module Admin
       render inertia: "admin/users/new"
     end
 
+    # "Mark as verified" vouches for the address (the admin knows them):
+    # no verification email is sent. Otherwise they get one, as before.
     def create
       @user = User.new(user_params)
+      @user.verified = verified_by_admin?
 
       if @user.save
-        send_email_verification
-        redirect_to admin_users_path, notice: "#{@user.name} was added"
+        if @user.verified?
+          redirect_to admin_users_path, notice: "#{@user.name} was added and marked as verified"
+        else
+          send_email_verification
+          redirect_to admin_users_path, notice: "#{@user.name} was added -- a verification email is on its way"
+        end
       else
         redirect_to new_admin_user_path, inertia: { errors: @user.errors }
       end
@@ -40,6 +47,10 @@ module Admin
 
     def user_params
       params.permit(:email, :name, :password, :password_confirmation)
+    end
+
+    def verified_by_admin?
+      ActiveModel::Type::Boolean.new.cast(params[:verified]) == true
     end
 
     def send_email_verification

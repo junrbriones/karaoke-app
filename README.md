@@ -151,7 +151,10 @@ Only an admin can add a user or a group &mdash; there's no public sign-up,
 and creating a group is otherwise gated the same way. An admin gets an
 **Admin** entry in the sidebar, which opens `/admin/users`: a list of every
 user, and a "+ New user" button (name, email, and a password the admin
-sets and shares with them directly). Creating a group works the same way,
+sets and shares with them directly). They're sent an email to verify their
+address &mdash; unless the admin ticks **Mark as verified**, vouching for
+the address themselves: the account is verified from the start and no
+email is sent. Creating a group works the same way,
 gated onto the same `/admin/groups/new` form, and the "+ New group" button
 on the Groups page only shows up for an admin.
 
