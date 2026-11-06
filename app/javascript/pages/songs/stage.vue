@@ -73,6 +73,10 @@ const persist = { initOnMounted: true }
 const beatsPerLine = useLocalStorage("chordstage:beatsperline", 4, persist)
 const countIn = useLocalStorage("chordstage:countin", 4, persist)
 const scrollSpeed = useLocalStorage("chordstage:scrollspeed", 40, persist)
+// How early (seconds) each line reaches the sheet's reading line, so the
+// singer is already looking at it when it starts.
+const sheetLead = useLocalStorage("chordstage:sheetlead", 0.5, persist)
+const LEAD_RANGE = { min: 0, max: 1.5, step: 0.25 }
 // How the chord sheet's Scroll moves for a tempo-guide song: at the song's
 // own pace (line by line, as long as each line lasts -- see Line timing),
 // or at a free speed in pixels per second.
@@ -327,14 +331,19 @@ const stageHint = computed(() => {
 
 // The chord sheet view's ball, word fill and glide follow the tempo guide,
 // or for an audio-synced song, its karaoke sync's timing.
-const sheetGuide = computed(() => {
+function sheetGuideAt(t: number) {
   if (usesAudio.value) {
-    return syncTimeline.value
-      ? guideAt(syncTimeline.value.lines, tempoTime.value)
-      : null
+    return syncTimeline.value ? guideAt(syncTimeline.value.lines, t) : null
   }
-  return guideAt(timeline.value.lines, tempoTime.value)
-})
+  return guideAt(timeline.value.lines, t)
+}
+const sheetGuide = computed(() => sheetGuideAt(tempoTime.value))
+// The scrolling runs `sheetLead` real seconds ahead (in the clock's units).
+const sheetScrollGuide = computed(() =>
+  sheetLead.value > 0
+    ? sheetGuideAt(tempoTime.value + sheetLead.value * clockRate.value)
+    : null,
+)
 
 /* ---- transport ---- */
 function play() {
@@ -529,8 +538,11 @@ const scrolling = ref(false)
 // each line lasts, with the current line marked but no ball (a clean
 // teleprompter). Its speed is the Tempo. Free scrolling (pixels per
 // second) is for audio-synced songs, or when chosen in Settings.
+// The sheet of an audio-synced song always follows its karaoke sync --
+// that's the song's real pace; "Scroll at song pace" (on by default) is
+// the choice for a tempo-guide song.
 const songPaced = computed(
-  () => (!usesAudio.value || syncedSheet.value) && scrollPace.value === "song",
+  () => syncedSheet.value || (!usesAudio.value && scrollPace.value === "song"),
 )
 const sheetBall = ref(true)
 const scrollActive = computed(() =>
@@ -801,6 +813,7 @@ onBeforeUnmount(() => {
         :prefer-flat="preferFlat"
         :font-scale="sheetScale"
         :guide="sheetGuide"
+        :scroll-guide="sheetScrollGuide"
         :ball="sheetBall"
         :auto-scroll="scrolling"
         :speed="scrollSpeed"
@@ -1026,7 +1039,7 @@ onBeforeUnmount(() => {
           </div>
           <p class="settings-note">{{ vocalHow }}</p>
         </template>
-        <template v-if="!usesAudio || syncedSheet">
+        <template v-if="!usesAudio">
           <TvButton
             label="Scroll at song pace"
             title="The sheet's Scroll follows the song's tempo and line timing; turn off to scroll at a free speed"
@@ -1049,6 +1062,18 @@ onBeforeUnmount(() => {
             @click="editLineTiming"
           />
         </template>
+        <TvStepper
+          v-if="songPaced || !usesAudio || syncedSheet"
+          label="Lines arrive early"
+          :value="sheetLead ? `${sheetLead} s` : 'Off'"
+          dec-label="Less"
+          inc-label="More"
+          title="How far ahead of the singing each line reaches the sheet's reading line"
+          :can-dec="sheetLead > LEAD_RANGE.min"
+          :can-inc="sheetLead < LEAD_RANGE.max"
+          @dec="sheetLead = stepValue(sheetLead, -1, LEAD_RANGE)"
+          @inc="sheetLead = stepValue(sheetLead, 1, LEAD_RANGE)"
+        />
         <TvStepper
           v-if="!songPaced"
           label="Scroll speed"

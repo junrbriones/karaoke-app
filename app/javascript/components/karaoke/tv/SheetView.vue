@@ -27,6 +27,10 @@ const props = withDefaults(
     preferFlat?: boolean
     fontScale?: number
     guide?: GuidePosition | null
+    // Where the scrolling should be, if not at `guide`: the same song a
+    // moment later, so each line reaches the reading line just before it's
+    // sung (the marked line and the ball still follow `guide`).
+    scrollGuide?: GuidePosition | null
     autoScroll?: boolean
     speed?: number // pixels per second
     ball?: boolean // the bouncing ball and word fill, with the tempo guide
@@ -36,6 +40,7 @@ const props = withDefaults(
     preferFlat: false,
     fontScale: 1,
     guide: null,
+    scrollGuide: null,
     autoScroll: false,
     speed: 40,
     ball: true,
@@ -46,7 +51,7 @@ const READING_LINE = 0.34 // fraction of the visible height
 // Smoothing on top of the glide, so a jump (restart, a tempo change, a
 // song change) eases instead of snapping. Short enough that the glide
 // itself stays on time.
-const FOLLOW_TIME = 0.12
+const FOLLOW_TIME = 0.05
 
 const scroller = ref<HTMLElement | null>(null)
 const content = ref<HTMLElement | null>(null)
@@ -171,12 +176,10 @@ watch(
     }
   },
 )
-watch(
-  () => props.guide,
-  (g) => {
-    if (g && !props.autoScroll) follow(g)
-  },
-)
+const scrollTo = computed(() => props.scrollGuide ?? props.guide)
+watch(scrollTo, (g) => {
+  if (g && !props.autoScroll) follow(g)
+})
 
 function remeasure() {
   measure()
@@ -184,8 +187,8 @@ function remeasure() {
     scrollMarked.value = lineAt(
       (scroller.value?.scrollTop ?? 0) + readingOffset() + 1,
     )
-  } else if (props.guide) {
-    follow(props.guide)
+  } else if (scrollTo.value) {
+    follow(scrollTo.value)
   }
 }
 useResizeObserver(content, remeasure)

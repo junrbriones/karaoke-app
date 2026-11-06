@@ -166,6 +166,41 @@ User.find_by(email: "someone@example.com").update!(admin: true)
 The seeded demo account (`demo@example.com`) is admin by default, so a
 fresh `bin/rails db:seed` always leaves you with at least one.
 
+### Activity log
+
+**Admin &rarr; Activity** (`/admin/activity`) is a log of who did what:
+
+- **Sign-ins**: signing in, failed attempts (against the account when the
+  email belongs to one &mdash; "wrong password" &mdash; or the email tried
+  when it doesn't), signing out, and logging out another device.
+- **Account**: password reset requests and resets, email verification,
+  password/email/profile changes, deleting an account.
+- **Admin**: adding a user, creating a group.
+- **Songs**: adding, editing, deleting and starring songs, opening Stage
+  Mode, saving a karaoke sync or line timing, uploading audio or a
+  minus-one.
+- **Groups & live**: sharing songs, editing/deleting groups, adding and
+  removing members, setlists, starting and ending live sessions.
+
+Each entry has the time, the person, what it was done to (a song's title,
+a group's name, as it was then), the app's own confirmation message, the
+device (from the browser's user agent: "Chrome on Windows", "Samsung TV")
+and IP address, and whether it went through &mdash; a refused or invalid
+attempt is kept and marked "didn't go through", with the reason. Filter by
+person, kind, period (24 hours to all time), failed only, or search names,
+songs and IPs; 50 at a time, newest first. The top shows sign-ins and
+failed sign-ins in the last 24 hours (click the failed count to see them)
+and how many people were active this week. **Users** shows each person's
+last sign-in, any failed sign-ins today, and a link to their activity.
+
+Page views and live-session play/pause/tempo commands aren't logged, to
+keep it readable. Entries are kept for a year (`ActivityEvent::RETENTION`)
+and older ones are removed automatically; when an account is deleted its
+entries stay, under the name and email it had. Logging never gets in the
+way: if an entry can't be written, the action still goes through. The log
+is `activity_events` (`app/models/activity_event.rb`); what's recorded is
+listed in `app/controllers/concerns/tracks_activity.rb`.
+
 ## Groups
 
 A group is a shared songbook for a band. Only an admin can create a group
@@ -552,7 +587,12 @@ sheet's by their words, in order; chord-only lines and any line that
 doesn't match share out the time around them). It starts at the sync's
 tempo (found from the line taps) and Tempo -/+ moves it in 2 BPM steps
 (50&ndash;150%) without losing your place; Play shows the ball, Scroll is
-the clean song-paced teleprompter, and there's a count-in. Switching
+the clean song-paced teleprompter (always at the sync's pace for such a
+song), and there's a count-in. In any song-paced sheet, each line reaches
+the reading line a moment before it's sung &mdash; **Lines arrive early**
+in Settings, 0.5 s by default (0&ndash;1.5 s) &mdash; so the singer is
+already looking at it when it starts; the marked line and the ball still
+change right on time. Switching
 between Karaoke and Sheet mid-song carries on from the same spot &mdash; the
 recording hands over to the sheet's silent clock and back, at the same
 speed. A setlist mixes freely: each song uses its own

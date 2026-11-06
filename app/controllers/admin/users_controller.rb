@@ -7,8 +7,17 @@ module Admin
   # touch the session cookie at all).
   class UsersController < BaseController
     def index
+      last_sign_in = ActivityEvent.where(action: "signed_in").group(:user_id).maximum(:created_at)
+      last_active = ActivityEvent.group(:user_id).maximum(:created_at)
+      failed = ActivityEvent.where(action: "sign_in_failed", created_at: 1.day.ago..).group(:user_id).count
       render inertia: "admin/users/index", props: {
-        users: User.order(:name).map { |u| user_json(u) }
+        users: User.order(:name).map do |u|
+          user_json(u).merge(
+            last_sign_in_at: last_sign_in[u.id],
+            last_active_at: last_active[u.id],
+            failed_sign_ins_today: failed[u.id] || 0
+          )
+        end
       }
     end
 

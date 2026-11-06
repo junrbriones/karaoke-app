@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_31_000012) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_06_000013) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.bigint "blob_id", null: false
     t.datetime "created_at", null: false
@@ -37,6 +37,25 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_31_000012) do
     t.bigint "blob_id", null: false
     t.string "variation_digest", null: false
     t.index ["blob_id", "variation_digest"], name: "index_active_storage_variant_records_uniqueness", unique: true
+  end
+
+  create_table "activity_events", force: :cascade do |t|
+    t.string "action", null: false
+    t.string "actor_label"
+    t.string "category", null: false
+    t.datetime "created_at", null: false
+    t.json "details"
+    t.string "ip_address"
+    t.string "outcome", default: "ok", null: false
+    t.bigint "subject_id"
+    t.string "subject_label"
+    t.string "subject_type"
+    t.string "user_agent"
+    t.integer "user_id"
+    t.index ["category", "created_at"], name: "index_activity_events_on_category_and_created_at"
+    t.index ["created_at"], name: "index_activity_events_on_created_at"
+    t.index ["user_id", "created_at"], name: "index_activity_events_on_user_id_and_created_at"
+    t.index ["user_id"], name: "index_activity_events_on_user_id"
   end
 
   create_table "groups", force: :cascade do |t|
@@ -149,6 +168,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_31_000012) do
 
   add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
+  add_foreign_key "activity_events", "users", on_delete: :nullify
   add_foreign_key "live_sessions", "groups"
   add_foreign_key "live_sessions", "users", column: "leader_id"
   add_foreign_key "memberships", "groups"

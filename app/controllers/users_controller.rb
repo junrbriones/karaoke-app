@@ -7,6 +7,7 @@ class UsersController < InertiaController
   def destroy
     user = Current.user
     if user.authenticate(params[:password_challenge] || "")
+      ActivityEvent.record("account_deleted", user: user)
       user.destroy!
       Current.session = nil
       redirect_to root_path, notice: "Your account has been deleted", inertia: { clear_history: true }

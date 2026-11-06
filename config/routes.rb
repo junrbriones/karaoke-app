@@ -12,6 +12,8 @@ Rails.application.routes.draw do
   namespace :admin do
     resources :users, only: [ :index, :new, :create ]
     resources :groups, only: [ :new, :create ]
+    # Who signed in (or tried to), and what they changed.
+    get "activity", to: "activity#index", as: :activity
   end
 
   namespace :identity do

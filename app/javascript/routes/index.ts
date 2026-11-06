@@ -5,6 +5,7 @@
 export { default as Routes } from './RoutesController'
 export { default as adminUsers } from './Admin/UsersController'
 export { default as adminGroups } from './Admin/GroupsController'
+export { default as adminActivity } from './Admin/ActivityController'
 export { default as dashboard } from './DashboardController'
 export { default as home } from './HomeController'
 export { default as identityEmailVerifications } from './Identity/EmailVerificationsController'

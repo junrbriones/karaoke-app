@@ -12,14 +12,27 @@ class SessionsController < InertiaController
     if user = User.authenticate_by(email: params[:email], password: params[:password])
       @session = user.sessions.create!
       cookies.signed.permanent[:session_token] = { value: @session.id, httponly: true }
+      ActivityEvent.record("signed_in", user: user)
 
       redirect_to after_sign_in_path, notice: "Signed in successfully"
     else
+      # The account it was for, if there is one -- several of these in a row
+      # are worth an admin's attention.
+      email = params[:email].to_s.strip.downcase
+      ActivityEvent.record(
+        "sign_in_failed", user: User.find_by(email: email), outcome: "failed",
+        details: { email: email.truncate(120) }
+      )
       redirect_to sign_in_path, alert: "That email or password is incorrect"
     end
   end
 
   def destroy
+    own = @session == Current.session
+    ActivityEvent.record(
+      own ? "signed_out" : "session_revoked",
+      details: own ? nil : { device: @session.user_agent.to_s.truncate(200), ip: @session.ip_address }
+    )
     @session.destroy!
     Current.session = nil
     redirect_to settings_sessions_path, notice: "That session has been logged out", inertia: { clear_history: true }
