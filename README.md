@@ -145,6 +145,70 @@ can't find.
 Title, artist, key, capo, and tempo are separate fields on the song, not
 part of that text.
 
+
+### Importing many songs at once
+
+**Songs &rarr; Import** (`/songs/import`) brings in a whole batch of chord
+sheets, from files and/or pasted text:
+
+- **Files**: drop them on the page or choose them &mdash; plain text
+  (`.txt`) with chords above the lyrics, ChordPro (`.cho`, `.chopro`,
+  `.chordpro`, `.crd`, `.pro`), or a `.zip` of any of those (up to 1 MB a
+  sheet, 25 MB a zip; anything else is listed as skipped). Files are read in
+  the browser (UTF-8, or Windows-1252 from older editors).
+- **Paste**: several songs in one box, with a line of `---` between them.
+- **ChordPro** is converted: `{title}`, `{artist}`/`{subtitle}`, `{key}`,
+  `{capo}` and `{tempo}` fill in the song's details; `{start_of_chorus}`,
+  `{start_of_verse: Verse 2}`, `{comment: Interlude}` and the like become
+  `[Chorus]`, `[Verse 2]`, `[Interlude]` headers; and each inline `[C]chord`
+  goes on a chord line above its lyric, at the column where it was.
+- **Plain text** keeps its chord lines as they are. `Title:`, `Artist:`,
+  `Key:`, `Capo:`, `Tempo:`/`BPM:` lines at the top are read as details;
+  otherwise the first line is the title (`Title - Artist` or `Title by
+  Artist` splits off the artist), or the file name is (`Artist -
+  Title.txt`). Section labels written as `Chorus:`, `VERSE 1` or `(Bridge)`
+  become `[Chorus]`, `[Verse 1]`, `[Bridge]`.
+
+Every song is listed to check before anything is saved: the title and
+artist can be edited (&#8644; swaps them), **Preview** shows the sheet as
+the app will display it next to its text (editable, with any lines worth a
+second look flagged), and anything already in your songs &mdash; or in the
+list twice &mdash; is pointed out and left unticked. **Import** saves the
+ticked songs (up to 200 at a time) all together: if any can't be saved,
+none are, and the reason shows against that song so it can be fixed or
+unticked. Import only chord sheets you have the right to use.
+
+## Guitar chord charts
+
+**Chords** in the sidebar (`/chords`) is a chord dictionary for anyone
+learning guitar. Type a chord name -- `C#m7`, `c#m7`, `Bbmaj7`, `B♭maj7`,
+`G/B`, `F#7(b9)`, `Bø`, `E°7` -- and it shows:
+
+- the chord's full name ("C sharp minor seventh"), its notes (C# E G# B,
+  root in orange), its formula (`1 b3 (5) b7`; a note in brackets can be
+  left out), and its other name when it has one (Dbm7);
+- up to six ways to play it, the most common first and then others up the
+  neck: a chart for each with the fingers to use (1 index to 4 little), the
+  barre, × for strings not played and ○ for open strings, the note each
+  string plays, and the shape in tab form (`x46454`).
+
+Typing a kind of chord instead ("minor seventh", "diminished", "sus")
+lists those chords; the row of note buttons and the grid below browse every
+chord on a root (29 kinds: major, minor, 7, maj7, m7, sus2/sus4, 7sus4, 6,
+m6, add9, m(add9), 9, maj9, m9, 6/9, dim, dim7, m7b5, aug, 7#5, 7b5, 7b9,
+7#9, m(maj7), 11, m11, 13, 5). The address follows the search
+(`/chords?q=C%23m7`), so a chord can be bookmarked or sent to someone.
+
+Nothing is typed in by hand: `lib/guitarChords.ts` works out each chord's
+notes from music theory and searches the fretboard (standard tuning) for
+playable shapes, scoring them so the familiar open chords and E-/A-shape
+barre chords come first -- so every chart is right for any root.
+
+Each song's page also has a **Chord charts** panel (collapsible) with a
+chart for every chord the song uses, in the order they first come up, and
+in the key it's being shown in -- transpose the song and the charts follow.
+Tap one for the other ways to play it.
+
 ## Administration
 
 Only an admin can add a user or a group &mdash; there's no public sign-up,

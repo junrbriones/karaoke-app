@@ -3,6 +3,7 @@ import { Head, Link, router } from "@inertiajs/vue3"
 import { computed, ref } from "vue"
 
 import SongBody from "@/components/karaoke/SongBody.vue"
+import SongChordCharts from "@/components/karaoke/SongChordCharts.vue"
 import TransposeControl from "@/components/karaoke/TransposeControl.vue"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -211,6 +212,12 @@ function toggleShare(group: ShareableGroup) {
           v-model:preferFlat="preferFlat"
         />
       </div>
+
+      <SongChordCharts
+        :blocks="blocks"
+        :semitones="semitones"
+        :prefer-flat="preferFlat"
+      />
 
       <div class="bg-card rounded-xl border p-5">
         <SongBody

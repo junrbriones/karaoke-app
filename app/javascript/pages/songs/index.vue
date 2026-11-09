@@ -9,7 +9,12 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import AppLayout from "@/layouts/AppLayout.vue"
 import * as storage from "@/lib/storage"
-import { mySetlists, setlistStage, songs as songsRoutes } from "@/routes"
+import {
+  mySetlists,
+  setlistStage,
+  songImports,
+  songs as songsRoutes,
+} from "@/routes"
 import type { BreadcrumbItem, Song } from "@/types"
 
 const props = defineProps<{ songs: Song[] }>()
@@ -101,9 +106,14 @@ function setViewMode(mode: ViewMode) {
             <List class="size-4" />
           </Button>
         </div>
-        <Link :href="songsRoutes.new()">
-          <Button>+ New song</Button>
-        </Link>
+        <div class="flex gap-2">
+          <Link :href="songImports.new()">
+            <Button variant="outline">Import</Button>
+          </Link>
+          <Link :href="songsRoutes.new()">
+            <Button>+ New song</Button>
+          </Link>
+        </div>
       </div>
 
       <div class="bg-card rounded-xl border p-4">

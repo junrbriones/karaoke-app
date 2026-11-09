@@ -26,6 +26,7 @@ class ActivityEvent < ApplicationRecord
     "user_created" => [ "admin", "Added a user" ],
     "group_created" => [ "admin", "Created a group" ],
     "song_created" => [ "songs", "Added a song" ],
+    "songs_imported" => [ "songs", "Imported songs" ],
     "song_updated" => [ "songs", "Edited a song" ],
     "song_deleted" => [ "songs", "Deleted a song" ],
     "setlist_toggled" => [ "songs", "Starred/unstarred a song" ],

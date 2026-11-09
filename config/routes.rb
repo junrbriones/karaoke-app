@@ -23,6 +23,11 @@ Rails.application.routes.draw do
 
   get :dashboard, to: "dashboard#index"
 
+  # Many chord sheets at once, from files or pasted text (before
+  # `resources :songs`, so "import" isn't taken for a song's slug).
+  get "songs/import", to: "song_imports#new", as: :import_songs
+  post "songs/import", to: "song_imports#create"
+
   resources :songs do
     resources :song_shares, only: [ :create, :destroy ]
     resource :phrasing, only: [ :show, :update ], controller: "songs/phrasings"
@@ -33,6 +38,9 @@ Rails.application.routes.draw do
     end
   end
   get "stage", to: "songs#stage", as: :setlist_stage
+
+  # Guitar chord charts with search ("what's a C#m7?").
+  get "chords", to: "chords#index", as: :chords
 
   # Everyone's own setlists, for performing solo (a group's are under
   # /groups/:group_id/setlists).

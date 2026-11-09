@@ -23,6 +23,7 @@ module TracksActivity
     "admin/users#create" => [ "user_created", :@user ],
     "admin/groups#create" => [ "group_created", :@group ],
     "songs#create" => [ "song_created", :@song ],
+    "song_imports#create" => [ "songs_imported" ],
     "songs#update" => [ "song_updated", :@song ],
     "songs#destroy" => [ "song_deleted", :@song ],
     "songs#toggle_setlist" => [ "setlist_toggled", :@song ],
