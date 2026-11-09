@@ -249,6 +249,17 @@ specific rehearsal or show. Open a group and click **Setlists**.
   on shortlist for whoever's signed in, while a group setlist is named,
   ordered, shared with the whole band, and managed by the group's owner.
 
+**Your own setlists (solo).** Every user also has their own setlists, for
+performing solo: **Setlists** in the sidebar (`/setlists`). Create, rename
+and delete them; add any song you can open &mdash; your own, and anything
+shared with a group you're in (the add panel searches as you type) &mdash;
+reorder with &#9650;/&#9660;, and **Start Stage Mode** to play them in order.
+A song's page has an **Add to setlist&hellip;** picker (with "+ New
+setlist&hellip;" to start one with that song). If a song is later unshared
+from you, it stays listed, marked "no longer shared with you", and is
+skipped in Stage Mode. The &#9733; star (now labelled Star/Starred) is still
+the quick A-to-Z list, shown alongside your setlists.
+
 ### Live Sync
 
 A song (or a whole setlist) can be played in sync across every group
@@ -566,6 +577,15 @@ tap from that point on and rewind the audio to just before it. Switching
 from line to word mode starts from the word times the line taps placed, so
 you can line-sync the song and then re-tap only the words that need it
 (switching back re-places them from the line taps).
+
+**Who can edit it.** A song's karaoke sync (and its audio and minus-one
+uploads) and its line timing are its owner's to make &mdash; unless the
+owner ticks **Let group members edit its karaoke sync and line timing**
+under "Share with your groups" on the song's page. Then anyone in a group
+the song is shared with gets the Karaoke sync and Line timing buttons too
+(and Stage Mode's "Finish karaoke sync"/"Edit line timing"): one shared
+version, the latest save wins, every save in the activity log under who
+made it. The lyrics and chords stay the owner's to edit.
 
 A song is only "ready" for Stage Mode once every line (line mode) or every
 word (word mode) is tapped. Until then Stage Mode follows the tempo guide

@@ -51,6 +51,15 @@ class Song < ApplicationRecord
     user_id == user.id
   end
 
+  # Its owner, or -- when the owner allows it (members_edit_sync) -- anyone
+  # in a group it's shared with, can edit its karaoke sync and line timing.
+  def sync_editable_by?(user)
+    return false if user.nil?
+    return true if owned_by?(user)
+
+    members_edit_sync && Song.accessible_to(user).exists?(id: id)
+  end
+
   # Compact JSON for lists (library grid, group dashboard, setlist).
   def summary_json(viewer)
     {
@@ -75,7 +84,9 @@ class Song < ApplicationRecord
   def detail_json(viewer)
     json = summary_json(viewer).merge(
       body: body, phrasing: phrasing, line_timing: line_timing,
-      audio_url: audio_url, instrumental_url: instrumental_url
+      audio_url: audio_url, instrumental_url: instrumental_url,
+      members_edit_sync: members_edit_sync,
+      can_edit_sync: sync_editable_by?(viewer)
     )
     return json unless owned_by?(viewer)
 

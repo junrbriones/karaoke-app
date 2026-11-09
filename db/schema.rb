@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_06_000013) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_09_000015) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.bigint "blob_id", null: false
     t.datetime "created_at", null: false
@@ -119,12 +119,15 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_06_000013) do
 
   create_table "setlists", force: :cascade do |t|
     t.datetime "created_at", null: false
-    t.integer "group_id", null: false
+    t.integer "group_id"
     t.string "name", null: false
     t.string "slug", null: false
     t.datetime "updated_at", null: false
+    t.integer "user_id"
     t.index ["group_id", "slug"], name: "index_setlists_on_group_id_and_slug", unique: true
     t.index ["group_id"], name: "index_setlists_on_group_id"
+    t.index ["user_id", "slug"], name: "index_setlists_on_user_id_and_slug", unique: true
+    t.index ["user_id"], name: "index_setlists_on_user_id"
   end
 
   create_table "song_shares", force: :cascade do |t|
@@ -145,6 +148,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_06_000013) do
     t.boolean "in_setlist", default: false, null: false
     t.string "key"
     t.json "line_timing"
+    t.boolean "members_edit_sync", default: false, null: false
     t.json "phrasing"
     t.string "slug", null: false
     t.integer "tempo"
@@ -177,6 +181,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_06_000013) do
   add_foreign_key "setlist_songs", "setlists"
   add_foreign_key "setlist_songs", "songs"
   add_foreign_key "setlists", "groups"
+  add_foreign_key "setlists", "users"
   add_foreign_key "song_shares", "groups"
   add_foreign_key "song_shares", "songs"
   add_foreign_key "songs", "users"

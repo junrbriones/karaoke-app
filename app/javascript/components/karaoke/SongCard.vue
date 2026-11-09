@@ -47,8 +47,8 @@ function toggleSetlist(e: Event) {
           ? 'text-amber-500'
           : 'text-muted-foreground/40 hover:text-muted-foreground'
       "
-      :aria-label="song.in_setlist ? 'Remove from setlist' : 'Add to setlist'"
-      :title="song.in_setlist ? 'Remove from setlist' : 'Add to setlist'"
+      :aria-label="song.in_setlist ? 'Unstar' : 'Star (quick list)'"
+      :title="song.in_setlist ? 'Unstar' : 'Star (quick list)'"
       @click="toggleSetlist"
     >
       <Star class="size-5" :fill="song.in_setlist ? 'currentColor' : 'none'" />

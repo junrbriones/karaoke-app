@@ -41,6 +41,12 @@ module TracksActivity
     "setlists#stage" => [ "setlist_stage_opened", :@setlist ],
     "setlist_songs#create" => [ "setlist_song_added", :@setlist ],
     "setlist_songs#destroy" => [ "setlist_song_removed", :@setlist ],
+    "my_setlists#create" => [ "personal_setlist_created", :@setlist ],
+    "my_setlists#update" => [ "personal_setlist_updated", :@setlist ],
+    "my_setlists#destroy" => [ "personal_setlist_deleted", :@setlist ],
+    "my_setlists#stage" => [ "personal_setlist_stage_opened", :@setlist ],
+    "my_setlist_songs#create" => [ "personal_setlist_song_added", :@setlist ],
+    "my_setlist_songs#destroy" => [ "personal_setlist_song_removed", :@setlist ],
     "live_sessions#create" => [ "live_session_started", :@group ],
     "live_sessions#destroy" => [ "live_session_ended", :@group ]
   }.freeze

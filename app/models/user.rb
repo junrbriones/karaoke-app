@@ -15,6 +15,8 @@ class User < ApplicationRecord
   # Kept after the account is gone (the log keeps a name/email snapshot).
   has_many :activity_events, dependent: :nullify
   has_many :songs, dependent: :destroy
+  # A solo performer's own setlists (a group's belong to the group).
+  has_many :setlists, -> { where(group_id: nil) }, dependent: :destroy
   has_many :memberships, dependent: :destroy
   has_many :groups, through: :memberships
 

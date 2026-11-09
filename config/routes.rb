@@ -34,6 +34,19 @@ Rails.application.routes.draw do
   end
   get "stage", to: "songs#stage", as: :setlist_stage
 
+  # Everyone's own setlists, for performing solo (a group's are under
+  # /groups/:group_id/setlists).
+  resources :my_setlists, path: "setlists" do
+    member do
+      get :stage
+    end
+    resources :entries, only: [ :create, :destroy ], controller: "my_setlist_songs" do
+      member do
+        patch :move
+      end
+    end
+  end
+
   resources :groups, except: [ :new, :create ] do
     resources :memberships, only: [ :create, :destroy ]
     resources :setlists do

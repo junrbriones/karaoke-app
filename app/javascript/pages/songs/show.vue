@@ -9,6 +9,8 @@ import { Checkbox } from "@/components/ui/checkbox"
 import AppLayout from "@/layouts/AppLayout.vue"
 import { parseBody } from "@/lib/chordSheet"
 import {
+  mySetlistSongs,
+  mySetlists,
   songShares,
   songs as songsRoutes,
   songsPhrasings,
@@ -16,7 +18,14 @@ import {
 } from "@/routes"
 import type { BreadcrumbItem, ShareableGroup, Song } from "@/types"
 
-const props = defineProps<{ song: Song }>()
+interface MySetlistRef {
+  id: number
+  name: string
+  slug: string
+  has_song: boolean
+}
+
+const props = defineProps<{ song: Song; my_setlists?: MySetlistRef[] }>()
 
 const breadcrumbs: BreadcrumbItem[] = [
   { title: "Songs", href: songsRoutes.index().url },
@@ -29,6 +38,35 @@ const blocks = computed(() => parseBody(props.song.body ?? ""))
 const hasLineTiming = computed(
   () => Object.keys(props.song.line_timing?.lines ?? {}).length > 0,
 )
+
+/* ---- add to one of your own setlists ---- */
+const setlistChoice = ref("")
+const inSetlists = computed(() =>
+  (props.my_setlists ?? []).filter((s) => s.has_song),
+)
+function addToSetlist() {
+  const choice = setlistChoice.value
+  setlistChoice.value = ""
+  if (!choice) return
+  if (choice === "new") {
+    router.visit(mySetlists.new({ query: { song_id: props.song.id } }).url)
+    return
+  }
+  router.post(
+    mySetlistSongs.create({ my_setlist_id: choice }).url,
+    { song_id: props.song.id },
+    { preserveScroll: true },
+  )
+}
+
+/* ---- the owner can let group members edit the sync/line timing ---- */
+function setMembersEditSync(value: boolean) {
+  router.patch(
+    songsRoutes.update(props.song.slug).url,
+    { members_edit_sync: value },
+    { preserveScroll: true },
+  )
+}
 
 function toggleSetlist() {
   router.patch(
@@ -95,7 +133,7 @@ function toggleShare(group: ShareableGroup) {
             :variant="song.in_setlist ? 'default' : 'outline'"
             @click="toggleSetlist"
           >
-            {{ song.in_setlist ? "★ In setlist" : "☆ Add to setlist" }}
+            {{ song.in_setlist ? "★ Starred" : "☆ Star" }}
           </Button>
           <Link :href="songsRoutes.edit(song.slug)"
             ><Button variant="outline">Edit</Button></Link
@@ -118,7 +156,7 @@ function toggleShare(group: ShareableGroup) {
           <Button>Stage Mode</Button>
         </Link>
         <Link
-          v-if="song.owned"
+          v-if="song.can_edit_sync"
           :href="songsPhrasings.show({ song_id: song.slug }).url"
         >
           <Button variant="outline">
@@ -132,7 +170,7 @@ function toggleShare(group: ShareableGroup) {
           </Button>
         </Link>
         <Link
-          v-if="song.owned"
+          v-if="song.can_edit_sync"
           :href="songsTimings.show({ song_id: song.slug }).url"
           title="How long each line lasts, so Stage Mode's tempo guide and sheet scrolling keep the song's real pace"
         >
@@ -146,6 +184,28 @@ function toggleShare(group: ShareableGroup) {
         >
           Karaoke sync ready
         </span>
+        <select
+          v-model="setlistChoice"
+          class="border-input bg-background h-9 rounded-md border px-2 text-sm"
+          aria-label="Add to one of your setlists"
+          :title="
+            inSetlists.length
+              ? `In ${inSetlists.map((s) => s.name).join(', ')}`
+              : undefined
+          "
+          @change="addToSetlist"
+        >
+          <option value="">Add to setlist…</option>
+          <option
+            v-for="s in my_setlists ?? []"
+            :key="s.id"
+            :value="s.slug"
+            :disabled="s.has_song"
+          >
+            {{ s.has_song ? `✓ ${s.name}` : s.name }}
+          </option>
+          <option value="new">+ New setlist…</option>
+        </select>
         <TransposeControl
           v-model:semitones="semitones"
           v-model:preferFlat="preferFlat"
@@ -189,6 +249,25 @@ function toggleShare(group: ShareableGroup) {
             <span class="text-sm">{{ group.name }}</span>
           </li>
         </ul>
+        <label
+          v-if="song.shareable_groups.length"
+          class="mt-4 flex cursor-pointer items-start gap-2 border-t pt-3 text-sm"
+        >
+          <Checkbox
+            :model-value="!!song.members_edit_sync"
+            class="mt-0.5"
+            @update:model-value="(v) => setMembersEditSync(v === true)"
+          />
+          <span>
+            Let group members edit its karaoke sync and line timing
+            <span class="text-muted-foreground block text-xs">
+              Anyone in a group it's shared with can then tap out or fix its
+              karaoke sync (and upload its audio or minus-one) and its line
+              timing &mdash; one shared version, the latest save wins. The
+              lyrics and chords stay yours to edit.
+            </span>
+          </span>
+        </label>
       </div>
     </div>
   </AppLayout>

@@ -9,7 +9,7 @@ module Songs
     MAX_LINES = 2_000
     BEATS_RANGE = (0.25..128.0)
 
-    before_action :set_owned_song
+    before_action :set_sync_song
 
     def show
       render inertia: "songs/timing", props: { song: @song.detail_json(Current.user) }
@@ -37,8 +37,13 @@ module Songs
 
     private
 
-    def set_owned_song
-      @song = Current.user.songs.find_by!(slug: params[:song_id])
+    # The song's owner -- or, when the owner allows it, a member of a group
+    # it's shared with (Song#sync_editable_by?). Their own song first, if
+    # two share a slug.
+    def set_sync_song
+      @song = Current.user.songs.find_by(slug: params[:song_id]) ||
+        Song.accessible_to(Current.user).find_by!(slug: params[:song_id])
+      raise ActiveRecord::RecordNotFound unless @song.sync_editable_by?(Current.user)
     end
 
     # Keeps only well-formed entries: a text and a sensible beat length per

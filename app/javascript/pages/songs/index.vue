@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import AppLayout from "@/layouts/AppLayout.vue"
 import * as storage from "@/lib/storage"
-import { setlistStage, songs as songsRoutes } from "@/routes"
+import { mySetlists, setlistStage, songs as songsRoutes } from "@/routes"
 import type { BreadcrumbItem, Song } from "@/types"
 
 const props = defineProps<{ songs: Song[] }>()
@@ -113,9 +113,10 @@ function setViewMode(mode: ViewMode) {
           ★ Starred songs
         </h2>
         <p v-if="!setlistSongs.length" class="text-muted-foreground text-sm">
-          Star songs below to build your own quick run-through &mdash; separate
-          from any named setlist a group you're in has put together. Either way,
-          you run it in Stage Mode.
+          Star songs below for a quick A-to-Z run-through in Stage Mode. For a
+          named, ordered running order for a gig, make one of
+          <Link :href="mySetlists.index()" class="underline">your setlists</Link
+          >.
         </p>
         <template v-else>
           <ol class="list-inside list-decimal text-sm">

@@ -47,6 +47,12 @@ class ActivityEvent < ApplicationRecord
     "setlist_song_added" => [ "groups", "Added a song to a setlist" ],
     "setlist_song_removed" => [ "groups", "Removed a song from a setlist" ],
     "setlist_stage_opened" => [ "groups", "Opened a setlist in Stage Mode" ],
+    "personal_setlist_created" => [ "songs", "Created a setlist" ],
+    "personal_setlist_updated" => [ "songs", "Renamed a setlist" ],
+    "personal_setlist_deleted" => [ "songs", "Deleted a setlist" ],
+    "personal_setlist_song_added" => [ "songs", "Added a song to a setlist" ],
+    "personal_setlist_song_removed" => [ "songs", "Removed a song from a setlist" ],
+    "personal_setlist_stage_opened" => [ "songs", "Opened a setlist in Stage Mode" ],
     "live_session_started" => [ "groups", "Started a live session" ],
     "live_session_ended" => [ "groups", "Ended a live session" ]
   }.freeze

@@ -6,7 +6,7 @@ module Songs
   # and lib/phrasing.ts for the client-side parsing/recording). Owner-only,
   # same as the rest of song editing.
   class PhrasingsController < InertiaController
-    before_action :set_owned_song
+    before_action :set_sync_song
 
     def show
       render inertia: "songs/phrasing", props: { song: @song.detail_json(Current.user) }
@@ -48,8 +48,13 @@ module Songs
       end
     end
 
-    def set_owned_song
-      @song = Current.user.songs.find_by!(slug: params[:song_id])
+    # The song's owner -- or, when the owner allows it, a member of a group
+    # it's shared with (Song#sync_editable_by?). Their own song first, if
+    # two share a slug.
+    def set_sync_song
+      @song = Current.user.songs.find_by(slug: params[:song_id]) ||
+        Song.accessible_to(Current.user).find_by!(slug: params[:song_id])
+      raise ActiveRecord::RecordNotFound unless @song.sync_editable_by?(Current.user)
     end
 
     # The client sends the whole phrasing document as one JSON string field

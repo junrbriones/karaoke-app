@@ -88,6 +88,10 @@ export interface Song {
   instrumental_file?: (UploadedFile & { same_as_audio?: boolean }) | null
   phrasing?: Phrasing | null
   line_timing?: LineTiming | null
+  // Whether group members may edit its karaoke sync and line timing (set
+  // by the owner), and whether the viewer can.
+  members_edit_sync?: boolean
+  can_edit_sync?: boolean
   shares?: SongShareRef[]
   shareable_groups?: ShareableGroup[]
 }
@@ -113,6 +117,8 @@ export interface SetlistEntry {
   id: number
   position: number
   song: Song
+  // A personal setlist's song that's no longer shared with its owner.
+  unavailable?: boolean
 }
 
 export interface Setlist {

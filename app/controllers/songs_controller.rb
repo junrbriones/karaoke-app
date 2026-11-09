@@ -12,7 +12,13 @@ class SongsController < InertiaController
 
   # Viewable by the owner or by anyone in a group the song is shared with.
   def show
-    render inertia: "songs/show", props: { song: @song.detail_json(Current.user) }
+    setlists = Current.user.setlists.order(:name).to_a
+    with_song = SetlistSong.where(setlist: setlists, song: @song).pluck(:setlist_id).to_set
+    render inertia: "songs/show", props: {
+      song: @song.detail_json(Current.user),
+      # The viewer's own setlists, for "Add to setlist".
+      my_setlists: setlists.map { |s| { id: s.id, name: s.name, slug: s.slug, has_song: with_song.include?(s.id) } }
+    }
   end
 
   def new
@@ -79,6 +85,6 @@ class SongsController < InertiaController
   end
 
   def song_params
-    params.permit(:title, :artist, :key, :capo, :tempo, :body)
+    params.permit(:title, :artist, :key, :capo, :tempo, :body, :members_edit_sync)
   end
 end

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Link, usePage } from "@inertiajs/vue3"
-import { ListMusic, ShieldCheck, Users } from "lucide-vue-next"
+import { ListMusic, ListOrdered, ShieldCheck, Users } from "lucide-vue-next"
 import { computed } from "vue"
 
 import NavFooter from "@/components/NavFooter.vue"
@@ -15,7 +15,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar"
-import { adminUsers, groups, songs } from "@/routes"
+import { adminUsers, groups, mySetlists, songs } from "@/routes"
 import { type NavItem, type User } from "@/types"
 
 import AppLogo from "./AppLogo.vue"
@@ -28,6 +28,11 @@ const mainNavItems = computed<NavItem[]>(() => {
       title: "Songs",
       href: songs.index().url,
       icon: ListMusic,
+    },
+    {
+      title: "Setlists",
+      href: mySetlists.index().url,
+      icon: ListOrdered,
     },
     {
       title: "Groups",

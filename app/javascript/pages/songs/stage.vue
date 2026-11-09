@@ -964,7 +964,7 @@ onBeforeUnmount(() => {
         <template v-if="syncNote">
           <p class="settings-note settings-note--warn">{{ syncNote }}</p>
           <TvButton
-            v-if="currentSong?.owned"
+            v-if="currentSong?.can_edit_sync"
             label="Finish karaoke sync"
             @click="finishSync"
           />
@@ -1057,7 +1057,7 @@ onBeforeUnmount(() => {
             }}
           </p>
           <TvButton
-            v-if="currentSong?.owned && !usesAudio"
+            v-if="currentSong?.can_edit_sync && !usesAudio"
             label="Edit line timing"
             @click="editLineTiming"
           />
