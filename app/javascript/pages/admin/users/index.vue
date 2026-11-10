@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import AppLayout from "@/layouts/AppLayout.vue"
 import { timeAgo } from "@/lib/userAgent"
-import { adminActivity, adminUsers } from "@/routes"
+import { adminActivity, adminUserPasswords, adminUsers } from "@/routes"
 import type { BreadcrumbItem } from "@/types"
 
 interface AdminUser {
@@ -15,6 +15,7 @@ interface AdminUser {
   email: string
   admin: boolean
   verified: boolean
+  must_change_password: boolean
   created_at: string
   last_sign_in_at: string | null
   last_active_at: string | null
@@ -60,6 +61,12 @@ const breadcrumbs: BreadcrumbItem[] = [
               <Badge v-if="!user.verified" variant="secondary"
                 >unverified</Badge
               >
+              <Badge
+                v-if="user.must_change_password"
+                variant="outline"
+                title="An admin set their password; they'll choose their own when they next sign in"
+                >temporary password</Badge
+              >
             </span>
             <span class="text-muted-foreground flex items-center gap-3 text-xs">
               <Badge
@@ -91,6 +98,11 @@ const breadcrumbs: BreadcrumbItem[] = [
                 "
                 class="underline-offset-2 hover:underline"
                 >Activity</Link
+              >
+              <Link
+                :href="adminUserPasswords.edit({ user_id: user.id }).url"
+                class="underline-offset-2 hover:underline"
+                >Reset password</Link
               >
             </span>
           </li>

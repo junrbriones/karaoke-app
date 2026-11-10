@@ -233,6 +233,32 @@ User.find_by(email: "someone@example.com").update!(admin: true)
 The seeded demo account (`demo@example.com`) is admin by default, so a
 fresh `bin/rails db:seed` always leaves you with at least one.
 
+### Resetting a forgotten password
+
+While the app has no email set up, a "Forgot password?" link can't send
+anything -- so an admin sets a new password instead: **Admin → Users →
+Reset password** next to their name.
+
+- A random password is already filled in when the page opens. **Generate
+  password** makes another: *Easy to share* (four groups of letters and
+  numbers, `Kx7m-Pq2r-Tz9w-Hn4c`, easy to read out or type on a phone) or
+  *Strong* (16 characters with symbols). They're made with the browser's
+  cryptographic random numbers and leave out look-alike characters (0/O,
+  1/l/I). You can also type your own (12 characters at least).
+- **Ask them to choose their own password** (on by default): after they
+  sign in with it they're taken straight to Settings → Password and can't
+  use the rest of the app until they've picked one only they know. The
+  users list shows a "temporary password" badge until then.
+- Saving signs them out on every device, so the old password stops working
+  at once. The page then shows the new password and a ready-to-send message
+  (sign-in link, email, password) with copy buttons -- it isn't shown again
+  after you leave the page.
+- It's recorded in the activity log ("Set a new password for a user").
+
+The same generator and "choose their own password" option are on the **New
+user** form. The forgot-password page tells people to ask an admin if no
+email arrives.
+
 ### Activity log
 
 **Admin &rarr; Activity** (`/admin/activity`) is a log of who did what:

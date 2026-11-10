@@ -10,7 +10,11 @@ Rails.application.routes.draw do
   # Only an admin can add a user or a group -- there's no public sign-up.
   # Promoting a user to admin has no UI; it's done from `bin/rails console`.
   namespace :admin do
-    resources :users, only: [ :index, :new, :create ]
+    resources :users, only: [ :index, :new, :create ] do
+      # Setting a new password for someone who's forgotten theirs (there's
+      # no email to send a reset link with).
+      resource :password, only: [ :edit, :update ], controller: "user_passwords"
+    end
     resources :groups, only: [ :new, :create ]
     # Who signed in (or tried to), and what they changed.
     get "activity", to: "activity#index", as: :activity

@@ -36,6 +36,8 @@ export interface User {
   avatar?: string
   admin: boolean
   verified: boolean
+  // An admin set their password; they're asked to choose their own.
+  must_change_password?: boolean
   created_at: string
   updated_at: string
 }

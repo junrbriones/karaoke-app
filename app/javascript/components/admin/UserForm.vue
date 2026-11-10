@@ -3,6 +3,7 @@ import { Form } from "@inertiajs/vue3"
 import { LoaderCircle } from "lucide-vue-next"
 import { ref } from "vue"
 
+import PasswordGenerator from "@/components/admin/PasswordGenerator.vue"
 import { Button } from "@/components/ui/button"
 import {
   Field,
@@ -20,6 +21,11 @@ defineProps<{
 
 // Vouching for the address skips the verification email.
 const verified = ref(false)
+const password = ref("")
+const passwordConfirmation = ref("")
+// The admin knows this password: by default they choose their own on
+// first sign-in.
+const mustChange = ref(true)
 </script>
 
 <template>
@@ -60,13 +66,12 @@ const verified = ref(false)
 
       <Field>
         <FieldLabel for="password">Password</FieldLabel>
-        <Input
+        <PasswordGenerator
           id="password"
+          v-model="password"
           name="password"
-          type="password"
           required
-          autocomplete="new-password"
-          placeholder="Password"
+          @generated="(p) => (passwordConfirmation = p)"
         />
         <FieldError :errors="errors.password" />
       </Field>
@@ -75,6 +80,7 @@ const verified = ref(false)
         <FieldLabel for="password_confirmation">Confirm password</FieldLabel>
         <Input
           id="password_confirmation"
+          v-model="passwordConfirmation"
           name="password_confirmation"
           type="password"
           required
@@ -82,6 +88,31 @@ const verified = ref(false)
           placeholder="Confirm password"
         />
         <FieldError :errors="errors.password_confirmation" />
+      </Field>
+
+      <Field>
+        <label
+          for="must_change_password"
+          class="flex cursor-pointer items-start gap-3 rounded-lg border p-3 text-sm"
+          :class="mustChange ? 'border-primary bg-primary/5' : ''"
+        >
+          <input
+            id="must_change_password"
+            v-model="mustChange"
+            name="must_change_password"
+            type="checkbox"
+            value="1"
+            class="accent-primary mt-0.5 size-4"
+          />
+          <span>
+            <span class="font-medium"
+              >Ask them to choose their own password</span
+            >
+            <span class="text-muted-foreground block text-xs">
+              When they first sign in &mdash; so only they know it.
+            </span>
+          </span>
+        </label>
       </Field>
 
       <Field>
@@ -110,8 +141,11 @@ const verified = ref(false)
     </FieldGroup>
 
     <p class="text-muted-foreground text-xs">
-      Share this password with them directly &mdash; they can change it later
-      from their own account settings.
+      Share this password with them directly<template v-if="mustChange">
+        &mdash; they'll choose their own when they first sign in.</template
+      ><template v-else>
+        &mdash; they can change it later from their account settings.</template
+      >
       <template v-if="verified"
         >Their account is verified from the start.</template
       >

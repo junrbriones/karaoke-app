@@ -21,6 +21,7 @@ module TracksActivity
     "settings/emails#update" => [ "email_changed" ],
     "settings/profiles#update" => [ "profile_updated" ],
     "admin/users#create" => [ "user_created", :@user ],
+    "admin/user_passwords#update" => [ "user_password_reset", :@user ],
     "admin/groups#create" => [ "group_created", :@group ],
     "songs#create" => [ "song_created", :@song ],
     "song_imports#create" => [ "songs_imported" ],

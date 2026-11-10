@@ -30,6 +30,8 @@ module Admin
     def create
       @user = User.new(user_params)
       @user.verified = verified_by_admin?
+      # A password the admin chose: they pick their own on first sign-in.
+      @user.must_change_password = ActiveModel::Type::Boolean.new.cast(params[:must_change_password]) == true
 
       if @user.save
         if @user.verified?
@@ -64,6 +66,7 @@ module Admin
         email: user.email,
         admin: user.admin,
         verified: user.verified,
+        must_change_password: user.must_change_password,
         created_at: user.created_at
       }
     end

@@ -7,7 +7,7 @@ class Settings::PasswordsController < InertiaController
   end
 
   def update
-    if @user.update(user_params)
+    if @user.update(user_params.merge(must_change_password: false))
       redirect_to settings_password_path, notice: "Your password has been changed"
     else
       redirect_to settings_password_path, inertia: { errors: @user.errors }

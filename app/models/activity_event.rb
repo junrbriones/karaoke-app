@@ -24,6 +24,7 @@ class ActivityEvent < ApplicationRecord
     "profile_updated" => [ "account", "Updated their profile" ],
     "account_deleted" => [ "account", "Deleted their account" ],
     "user_created" => [ "admin", "Added a user" ],
+    "user_password_reset" => [ "admin", "Set a new password for a user" ],
     "group_created" => [ "admin", "Created a group" ],
     "song_created" => [ "songs", "Added a song" ],
     "songs_imported" => [ "songs", "Imported songs" ],

@@ -8,6 +8,7 @@ class ApplicationController < ActionController::Base
 
   before_action :set_current_request_details
   before_action :authenticate
+  before_action :require_password_change
 
   private
 
@@ -22,6 +23,16 @@ class ApplicationController < ActionController::Base
       flash[:alert] = "Please sign in to continue."
     end
     redirect_to sign_in_path
+  end
+
+  # Someone signed in with a password an admin set for them chooses their
+  # own before doing anything else (signing out still works).
+  def require_password_change
+    return unless Current.user&.must_change_password?
+    return if controller_path == "settings/passwords" ||
+      (controller_path == "sessions" && action_name == "destroy")
+
+    redirect_to settings_password_path, alert: "Please choose a new password to finish signing in."
   end
 
   def require_no_authentication

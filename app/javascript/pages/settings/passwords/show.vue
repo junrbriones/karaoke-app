@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { Form, Head } from "@inertiajs/vue3"
+import { Form, Head, usePage } from "@inertiajs/vue3"
+import { computed } from "vue"
 
 import HeadingSmall from "@/components/HeadingSmall.vue"
 import { Button } from "@/components/ui/button"
@@ -13,7 +14,7 @@ import { Input } from "@/components/ui/input"
 import AppLayout from "@/layouts/AppLayout.vue"
 import SettingsLayout from "@/layouts/settings/Layout.vue"
 import { settingsPasswords } from "@/routes"
-import { type BreadcrumbItem } from "@/types"
+import { type BreadcrumbItem, type User } from "@/types"
 
 const breadcrumbs: BreadcrumbItem[] = [
   {
@@ -21,6 +22,14 @@ const breadcrumbs: BreadcrumbItem[] = [
     href: settingsPasswords.show().url,
   },
 ]
+
+// An admin set this password: choose their own before carrying on.
+const page = usePage()
+const mustChange = computed(
+  () =>
+    (page.props.auth as { user: User | null }).user?.must_change_password ===
+    true,
+)
 </script>
 
 <template>
@@ -33,6 +42,19 @@ const breadcrumbs: BreadcrumbItem[] = [
           title="Update password"
           description="Ensure your account is using a long, random password to stay secure"
         />
+
+        <div
+          v-if="mustChange"
+          class="rounded-lg border border-amber-500/50 bg-amber-500/10 p-3 text-sm"
+          role="status"
+        >
+          <p class="font-medium">Choose your own password</p>
+          <p class="text-muted-foreground mt-1">
+            An admin set a temporary password for you. Type it as your current
+            password, then pick a new one only you know &mdash; the rest of the
+            app opens once it's saved.
+          </p>
+        </div>
 
         <Form
           class="space-y-6"

@@ -29,7 +29,8 @@ class Identity::PasswordResetsController < InertiaController
   end
 
   def update
-    if @user.update(user_params)
+    # A password they chose themselves: no "choose your own" step after.
+    if @user.update(user_params.merge(must_change_password: false))
       redirect_to sign_in_path, notice: "Your password was reset successfully. Please sign in"
     else
       redirect_to edit_identity_password_reset_path(sid: params[:sid]), inertia: { errors: @user.errors }
