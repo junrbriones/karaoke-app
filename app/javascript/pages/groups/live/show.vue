@@ -105,6 +105,7 @@ const lineBeats = computed(() =>
     blocks.value,
     currentSong.value?.line_timing,
     state.value.beats_per_line,
+    Number(currentSong.value?.tempo) || null,
   ),
 )
 const track = computed(() =>

@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import AppLayout from "@/layouts/AppLayout.vue"
 import { parseBody } from "@/lib/chordSheet"
+import { hasLineTiming as songHasLineTiming } from "@/lib/lineTiming"
 import {
   mySetlistSongs,
   mySetlists,
@@ -36,8 +37,8 @@ const breadcrumbs: BreadcrumbItem[] = [
 const semitones = ref(0)
 const preferFlat = ref(false)
 const blocks = computed(() => parseBody(props.song.body ?? ""))
-const hasLineTiming = computed(
-  () => Object.keys(props.song.line_timing?.lines ?? {}).length > 0,
+const hasLineTiming = computed(() =>
+  songHasLineTiming(blocks.value, props.song.line_timing),
 )
 
 /* ---- add to one of your own setlists ---- */

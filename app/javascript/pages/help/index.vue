@@ -522,40 +522,99 @@ function go(id: string) {
         <section v-show="visible('line-timing')" id="line-timing">
           <h2>Line timing</h2>
           <p>
-            Real songs don't give every line the same length. Line timing tells
-            the tempo guide how long each line really lasts, so the highlight
-            and the sheet's scrolling keep the singer's pace. Open a song and
-            click <strong>Line timing</strong>.
+            Real songs don't give every line the same length. Line timing
+            records when each line really starts, so Stage Mode's highlight and
+            the sheet's scrolling keep the singer's pace &mdash; even for a song
+            without uploaded audio. Open a song and click
+            <strong>Line timing</strong>.
           </p>
           <ol>
             <li>
-              Click <strong>Tap along from the top</strong> (or
-              <strong>Tap from here</strong> on any line).
+              Under <strong>Play the music from</strong>, choose
+              <strong>This song's audio</strong> (if it has some) or
+              <strong>Another app or device</strong> &mdash; Spotify, YouTube, a
+              CD, anything you can hear.
             </li>
             <li>
-              After the count-in, sing or play along and press
-              <kbd>Space</kbd> (or <strong>Next line</strong>) the moment each
-              next line begins.
+              Press <kbd>Enter</kbd>. With another app, start the music now.
             </li>
             <li>
-              Or set lengths by hand in beats with &minus;/+.
-              <strong>Preview</strong> plays it as the TV will show it.
+              Press <kbd>Space</kbd> the moment each line starts (with another
+              app, the first tap starts the stopwatch). Tap
+              <strong>End of the last line</strong> too.
             </li>
-            <li>Save.</li>
+            <li>
+              Made a mistake? Press <kbd>R</kbd>. With another app, play the
+              music from a little before the line <em>before</em> the one to
+              redo, and tap that line first &mdash; it lines the stopwatch up
+              with the music again &mdash; then carry on tapping.
+            </li>
+            <li>
+              <strong>Or type the times in.</strong> Click a line's start time
+              in the list and type the time your music player shows as the line
+              starts &mdash; <code>1:23.45</code> or <code>83.45</code> &mdash;
+              then press <kbd>Enter</kbd> (<kbd>Esc</kbd> cancels). Tick
+              <strong>Move the later lines too</strong> to shift every later
+              line by the same amount: handy for lining up stopwatch taps (which
+              start at 0:00 on the first line) with the player's clock by typing
+              just the first line's time.
+            </li>
+            <li>
+              Press <kbd>Ctrl</kbd>+<kbd>S</kbd> (or
+              <strong>Save timing</strong>).
+            </li>
           </ol>
+          <p>
+            The preview and the <strong>Line taps</strong> list sit side by
+            side. Each line lasts until the next one starts; the list shows its
+            start time and length, with &#9654;, &minus;/+ and
+            <strong>Re-tap</strong> on every line. Stage Mode plays the taps in
+            real time at the song's tempo, and its Tempo &minus;/+ speeds the
+            whole song up or slows it down evenly.
+          </p>
           <table class="keys">
             <tbody>
               <tr>
+                <td><kbd>Enter</kbd></td>
+                <td>Start / stop tapping</td>
+              </tr>
+              <tr>
                 <td><kbd>Space</kbd></td>
-                <td>Next line starts</td>
+                <td>Tap as each line starts</td>
+              </tr>
+              <tr>
+                <td><kbd>R</kbd></td>
+                <td>
+                  Re-tap the last line (press again to go further back), or from
+                  the line picked in the list
+                </td>
               </tr>
               <tr>
                 <td><kbd>Backspace</kbd></td>
-                <td>Undo the last tap and back up</td>
+                <td>Undo the last tap</td>
+              </tr>
+              <tr>
+                <td><kbd>&uarr;</kbd> / <kbd>&darr;</kbd></td>
+                <td>Pick a line (when stopped) &mdash; or click it</td>
+              </tr>
+              <tr>
+                <td><kbd>P</kbd></td>
+                <td>Preview from the picked line; again to pause</td>
+              </tr>
+              <tr>
+                <td><kbd>[</kbd> / <kbd>]</kbd></td>
+                <td>
+                  Move the picked line's tap 0.05 s earlier / later (hold
+                  <kbd>Shift</kbd> for 0.01 s)
+                </td>
               </tr>
               <tr>
                 <td><kbd>Esc</kbd></td>
                 <td>Stop</td>
+              </tr>
+              <tr>
+                <td><kbd>Ctrl</kbd>+<kbd>S</kbd></td>
+                <td>Save</td>
               </tr>
             </tbody>
           </table>

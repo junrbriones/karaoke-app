@@ -1,13 +1,15 @@
 # frozen_string_literal: true
 
 module Songs
-  # The line timing editor: how many beats each line of the chord sheet
-  # lasts, so the tempo guide (and the sheet's scrolling) follows the song's
-  # real pace. See app/javascript/pages/songs/timing.vue and
-  # lib/lineTiming.ts. Owner-only, like the rest of song editing.
+  # The line timing editor: when each line of the chord sheet starts, tapped
+  # out against the song's audio or music playing in another app, so the
+  # tempo guide (and the sheet's scrolling) follows the song's real pace.
+  # See app/javascript/pages/songs/timing.vue and lib/lineTiming.ts. The
+  # owner's -- or, when they allow it, their groups' (Song#sync_editable_by?).
   class TimingsController < InertiaController
     MAX_LINES = 2_000
     BEATS_RANGE = (0.25..128.0)
+    SECONDS_RANGE = (0.0..36_000.0)
 
     before_action :set_sync_song
 
@@ -15,9 +17,11 @@ module Songs
       render inertia: "songs/timing", props: { song: @song.detail_json(Current.user) }
     end
 
-    # Takes `line_timing` (a JSON string: { bpm, lines: { id => { text, beats } } },
-    # or blank to clear it) and optionally the song's `tempo`, which the
-    # beat lengths were worked out at.
+    # Takes `line_timing` (a JSON string, or blank to clear it):
+    #   { version: 2, bpm, source, end, lines: { id => { text, start } } }
+    # -- start times in seconds -- and optionally the song's `tempo`, the
+    # tempo Stage Mode plays the timing at in real time. (Older timings,
+    # { bpm, lines: { id => { text, beats } } }, are still accepted.)
     def update
       timing = parse_timing(params[:line_timing])
       if timing == :invalid
@@ -46,26 +50,46 @@ module Songs
       raise ActiveRecord::RecordNotFound unless @song.sync_editable_by?(Current.user)
     end
 
-    # Keeps only well-formed entries: a text and a sensible beat length per
-    # line id. Returns nil to clear the timing, or :invalid on bad JSON.
+    # Keeps only well-formed entries: a text and a sensible start time (or,
+    # in an older timing, a beat length) per line id. Returns nil to clear
+    # the timing, or :invalid on bad JSON.
     def parse_timing(raw)
       return nil if raw.blank?
 
       data = raw.is_a?(String) ? JSON.parse(raw) : raw.to_unsafe_h
       return :invalid unless data.is_a?(Hash) && data["lines"].is_a?(Hash)
 
+      timed = data["version"].to_i == 2 || data["lines"].values.any? { |e| e.is_a?(Hash) && e.key?("start") }
       lines = data["lines"].first(MAX_LINES).each_with_object({}) do |(id, entry), out|
         next unless entry.is_a?(Hash)
 
-        beats = Float(entry["beats"], exception: false)
-        next unless beats && BEATS_RANGE.cover?(beats)
+        text = entry["text"].to_s.first(500)
+        if timed
+          start = Float(entry["start"], exception: false)
+          next unless start && SECONDS_RANGE.cover?(start)
 
-        out[id.to_s.first(200)] = { "text" => entry["text"].to_s.first(500), "beats" => beats.round(2) }
+          out[id.to_s.first(200)] = { "text" => text, "start" => start.round(3) }
+        else
+          beats = Float(entry["beats"], exception: false)
+          next unless beats && BEATS_RANGE.cover?(beats)
+
+          out[id.to_s.first(200)] = { "text" => text, "beats" => beats.round(2) }
+        end
       end
       return nil if lines.empty?
 
       bpm = data["bpm"].to_i
-      { "bpm" => (bpm.between?(20, 300) ? bpm : nil), "lines" => lines }
+      bpm = bpm.between?(20, 300) ? bpm : nil
+      return { "bpm" => bpm, "lines" => lines } unless timed
+
+      finish = Float(data["end"], exception: false)
+      {
+        "version" => 2,
+        "bpm" => bpm,
+        "source" => %w[audio external].include?(data["source"]) ? data["source"] : nil,
+        "end" => finish && SECONDS_RANGE.cover?(finish) ? finish.round(3) : nil,
+        "lines" => lines
+      }
     rescue JSON::ParserError
       :invalid
     end

@@ -242,7 +242,12 @@ const secPerBeat = computed(() =>
 const origin = computed(() => -countIn.value * secPerBeat.value)
 // The song's own line lengths (its Line timing), where it has them.
 function lineBeatsAt(perLine: number) {
-  return lineBeatsFor(blocks.value, currentSong.value?.line_timing, perLine)
+  return lineBeatsFor(
+    blocks.value,
+    currentSong.value?.line_timing,
+    perLine,
+    Number(currentSong.value?.tempo) || null,
+  )
 }
 const lineBeats = computed(() => lineBeatsAt(beatsPerLine.value))
 const hasLineTiming = computed(() => lineBeats.value.some((b) => b != null))

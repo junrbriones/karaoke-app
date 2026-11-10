@@ -543,35 +543,56 @@ beats per line, count-in, scroll speed and pace) are remembered per device.
 
 A flat "every line is one bar" can't keep up with a real song: some lines
 are held for two bars, some rush by in half of one, and an intro may be
-longer than its chords suggest. No scroll speed matches that, because the
-pace changes line by line. **Line timing** (the button on a song you own,
-or Stage Mode &rarr; Settings &rarr; Edit line timing) gives each line its
-real length, so the highlight, the ball, the band's instrumental guidance
-and the sheet's scrolling all move on to the next line exactly when the
-singer does &mdash; in Stage Mode and in Live Sync.
+longer than its chords suggest. **Line timing** (the button on a song you
+can edit, or Stage Mode &rarr; Settings &rarr; Edit line timing) records
+when each line really starts, so the highlight, the ball, the band's
+instrumental guidance and the sheet's scrolling all move on to the next
+line exactly when the singer does &mdash; in Stage Mode and in Live Sync.
 
-- **Tap along**: press *Tap along from the top* (or *Tap from here* on any
-  line), sing or play along after the 4-beat count-in, and press `Space`
-  (or the big *Next line* button) the moment each next line begins. The
-  highlight waits at the end of a line for your tap rather than running
-  ahead, so you're never chasing it. `Backspace` undoes the last tap and
-  backs up to that line; `Esc` stops.
-- **By hand**: each line's length in beats, with -/+ (half a beat) or
-  typed in quarter beats, and a reset back to the default. Lines without
-  their own length use the default ("Untimed lines", the same beats-per-line
-  setting Stage Mode uses).
-- **Preview** plays the sheet exactly as the TV shows it (ball on or off),
-  from the top or from any line (&#9654;), and follows any edit live.
+It works like the karaoke sync's line taps: times, not beats.
 
-Lengths are saved in beats, not seconds, so the Tempo control still speeds
-the whole song up or slows it down evenly &mdash; saving also stores the
-tempo you timed it at as the song's tempo. An instrumental line's length is
-spread evenly over its bars. A repeated section (`[Repeat Chorus 1]`)
-shares the timing of the original. Each line is matched by its section and
-position *and* its words, so if you rewrite a line, its old timing is
-dropped rather than applied to the wrong words (two plain sections with
-the same name are told apart as `Verse`, `Verse~2`). The timing is stored
-on the song as `line_timing` (`songs.line_timing`, JSON).
+- **Play the music from** *This song's audio* (when the song has audio
+  uploaded) or *Another app or device* &mdash; Spotify, YouTube, a CD,
+  anything you can hear. With another app the page keeps time with a
+  stopwatch: press `Enter`, start the music, and press `Space` the moment
+  the first line starts (that starts the stopwatch), then again as each
+  next line starts. To redo a stretch (`R`, or **Re-tap** on a line), play
+  the music from a little before the line *before* it and tap that line
+  first: the stopwatch lines itself up with the music again, and the next
+  `Space` taps the line.
+- The **Preview** (the sheet exactly as the TV shows it, ball on or off)
+  and the **Line taps** list sit side by side; the list shows each line's
+  start time and length, follows the line you're about to tap, and has
+  &#9654; (preview from just before a line), &minus;/+ (move its tap
+  0.05 s) and **Re-tap**. A line lasts until the next line starts; tap
+  **End of the last line** too, or the last line gets the default length.
+- **Typing times in**: every start time in the list is a box you can type
+  in &mdash; read it off your music player's clock as the line starts:
+  `1:23.45`, `83.45` or `1:02:03` (Enter or clicking away saves it, Esc
+  puts it back, an empty box clears it). A time that isn't after the line
+  above is flagged, and that line gets the default length until it's fixed.
+  With **Move the later lines too** ticked, changing a time moves every
+  later tap by as much &mdash; e.g. type the player's time for the first
+  line to line up taps made with the stopwatch (which starts at 0:00 on the
+  first line) with the player's clock, then untick it to fix single lines.
+- Repeated sections (`[Repeat Chorus 1]`) are tapped like any other lines;
+  until they are, they play at the original's pace. Lines not tapped last
+  "Lines not tapped" beats (the same beats-per-line setting Stage Mode uses).
+- Keys (the same as the karaoke sync): `Enter` start/stop, `Space` tap,
+  `R` re-tap the last line (again to go further back; when stopped, from
+  the line picked in the list), `Backspace` undo, `↑`/`↓` pick a line,
+  `P` preview from it, `[`/`]` nudge its tap (`Shift`: 0.01 s), `Esc`
+  stop, `Ctrl`/`⌘`+`S` save.
+
+Stage Mode plays the taps in real time at the song's tempo (the **Song
+tempo** on the page, saved as the song's tempo), and its Tempo control
+speeds the whole song up or slows it down evenly from there. The timing is
+stored on the song as `line_timing` (`songs.line_timing`, JSON:
+`{ version: 2, bpm, source, end, lines: { id: { text, start } } }`). Each
+line is matched by its section, position and words, so a rewritten line's
+old time is dropped rather than applied to the wrong words. Timings saved
+before this (lengths in beats) still play exactly as before, and open in
+the editor converted to times.
 
 ## Karaoke Sync (KaraFun-style phrasing)
 
