@@ -38,7 +38,7 @@ import {
   rehydrateTimes,
   resolveToken,
 } from "@/lib/phrasing"
-import { songs as songsRoutes, songsPhrasings } from "@/routes"
+import { help, songs as songsRoutes, songsPhrasings } from "@/routes"
 import type { BreadcrumbItem, Song } from "@/types"
 
 const props = defineProps<{ song: Song }>()
@@ -568,16 +568,147 @@ const GRID_CHOICES = [
 // and Line timing) when the song doesn't have one yet.
 const saveTempo = ref(!songTempo)
 
-/* ---- keyboard ---- */
+/* ---- the taps list beside the practice screen ---- */
+// A line picked in the list (click it, or ↑/↓): R re-taps from it, P plays
+// from it, [ / ] nudge its tap. While tapping, the list follows along.
+const selectedCue = ref<number | null>(null)
+const cueList = ref<HTMLElement | null>(null)
+const lastCue = computed(() => totalCues.value - 1)
+function selectCue(i: number) {
+  if (lastCue.value < 0) return
+  selectedCue.value = Math.max(0, Math.min(lastCue.value, i))
+}
+function moveSelection(delta: number) {
+  const from = selectedCue.value ?? Math.max(0, cuePointer.value - 1)
+  selectCue(selectedCue.value == null ? from : from + delta)
+}
+watch(recording, (on) => {
+  if (on) selectedCue.value = null
+})
+// Keeps the line being tapped (or the one picked) in the middle of the
+// list, without scrolling the page.
+function keepInView() {
+  void nextTick(() => {
+    const list = cueList.value
+    const i = recording.value
+      ? cuePointer.value
+      : (selectedCue.value ?? cuePointer.value)
+    const row = list?.querySelector<HTMLElement>(`[data-cue="${i}"]`)
+    if (!list || !row) return
+    const top = row.offsetTop - list.clientHeight / 2 + row.offsetHeight / 2
+    list.scrollTo({ top: Math.max(0, top), behavior: "smooth" })
+  })
+}
+watch([cuePointer, selectedCue, recording], keepInView)
+
+/* ---- the audio, from the practice panel ---- */
+const duration = ref(0)
+function onDurationChange() {
+  const d = audioPlayer.value?.duration
+  duration.value = d && Number.isFinite(d) ? d : 0
+}
+function onScrub(e: Event) {
+  const el = audioPlayer.value
+  if (!el) return
+  el.currentTime = Number((e.target as HTMLInputElement).value)
+}
+function clock(t: number): string {
+  const s = Math.max(0, Math.floor(t))
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`
+}
+
+/* ---- shortcuts ---- */
+function toggleTapping() {
+  if (recording.value) stopTapping()
+  else startTapping()
+}
+// R: tap again from the line just tapped (press it again to go back one
+// more), or from the line picked in the list.
+function retapKey() {
+  if (!audioPlayer.value) return
+  if (lineMode.value) {
+    const i =
+      recording.value || selectedCue.value == null
+        ? cuePointer.value - 1
+        : selectedCue.value
+    if (i < 0) return
+    retapFrom(i)
+  } else {
+    if (tapPointer.value === 0 && recording.value) return
+    resetFrom(Math.max(0, tapPointer.value - 1))
+    if (!recording.value) startTapping()
+  }
+}
+// P: listen from the picked line (or the last one tapped); again to pause.
+function playSelected() {
+  const el = audioPlayer.value
+  if (!el) return
+  if (!el.paused) {
+    el.pause()
+    return
+  }
+  const i = selectedCue.value ?? Math.max(0, cuePointer.value - 1)
+  if (cueTime(i) != null) playFrom(i)
+  else void el.play()
+}
+
+function isTypingTarget(target: EventTarget | null): boolean {
+  const el = target as HTMLElement | null
+  if (!el) return false
+  if (el.isContentEditable) return true
+  if (el.tagName === "TEXTAREA" || el.tagName === "SELECT") return true
+  if (el.tagName !== "INPUT") return false
+  const type = (el as HTMLInputElement).type
+  return !["range", "checkbox", "radio", "button", "submit"].includes(type)
+}
+
 function onKeydown(e: KeyboardEvent) {
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
     e.preventDefault()
     save()
     return
   }
+  if (e.ctrlKey || e.metaKey || e.altKey) return
+  if (isTypingTarget(e.target)) return
   const tag = (e.target as HTMLElement | null)?.tagName ?? ""
-  if (tag === "INPUT" || tag === "TEXTAREA") return
-  if (!recording.value) return
+
+  // Start / stop, re-tap and stop work whether or not you're tapping.
+  if (e.key === "Enter") {
+    if (tag === "A") return
+    e.preventDefault()
+    if (!e.repeat) toggleTapping()
+    return
+  }
+  if (e.key === "Escape") {
+    if (recording.value) stopTapping()
+    else audioPlayer.value?.pause()
+    return
+  }
+  if (e.key.toLowerCase() === "r") {
+    e.preventDefault()
+    if (!e.repeat) retapKey()
+    return
+  }
+
+  if (!recording.value) {
+    if (!lineMode.value) return
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault()
+      moveSelection(e.key === "ArrowDown" ? 1 : -1)
+    } else if (e.key.toLowerCase() === "p") {
+      e.preventDefault()
+      playSelected()
+    } else if (
+      (e.code === "BracketLeft" || e.code === "BracketRight") &&
+      selectedCue.value != null
+    ) {
+      e.preventDefault()
+      const step = e.shiftKey ? 0.01 : 0.05
+      nudgeCue(selectedCue.value, e.code === "BracketLeft" ? -step : step)
+    }
+    return
+  }
+
   if (e.code === "Space") {
     e.preventDefault()
     if (e.repeat) return
@@ -590,14 +721,11 @@ function onKeydown(e: KeyboardEvent) {
   } else if (e.key === "ArrowRight" && !lineMode.value) {
     e.preventDefault()
     skipToken()
-  } else if (e.key === "Escape") {
-    stopTapping()
   }
 }
 function onKeyup(e: KeyboardEvent) {
   if (e.code !== "Space") return
-  const tag = (e.target as HTMLElement | null)?.tagName ?? ""
-  if (tag === "INPUT" || tag === "TEXTAREA") return
+  if (isTypingTarget(e.target)) return
   if (recording.value || pressing.value) e.preventDefault()
   if (lineMode.value) releaseLine()
 }
@@ -896,9 +1024,14 @@ function formatTime(t: number | null | undefined): string {
             recording.
           </p>
         </div>
-        <Link :href="songsRoutes.show(song.slug)">
-          <Button variant="outline">Back to song</Button>
-        </Link>
+        <div class="flex gap-2">
+          <Link :href="help.index({ anchor: 'karaoke-sync' })">
+            <Button variant="ghost">How to sync</Button>
+          </Link>
+          <Link :href="songsRoutes.show(song.slug)">
+            <Button variant="outline">Back to song</Button>
+          </Link>
+        </div>
       </div>
 
       <div class="bg-card rounded-xl border p-4">
@@ -914,6 +1047,7 @@ function formatTime(t: number | null | undefined): string {
           controls
           class="w-full"
           @loadedmetadata="onLoadedMetadata"
+          @durationchange="onDurationChange"
         ></audio>
         <div
           v-if="song.audio_url"
@@ -1191,77 +1325,123 @@ function formatTime(t: number | null | undefined): string {
         </div>
       </div>
 
-      <div class="bg-card rounded-xl border p-4">
-        <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <h2
-            class="text-muted-foreground text-xs font-semibold tracking-wide uppercase"
+      <!-- Syncing: the practice screen and the taps, side by side -->
+      <div class="sync-split">
+        <div class="sync-panel sync-practice">
+          <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <h2
+              class="text-muted-foreground text-xs font-semibold tracking-wide uppercase"
+            >
+              Practice screen
+            </h2>
+            <span v-if="!lineMode" class="text-muted-foreground text-xs"
+              >{{ tappedCount }}/{{ tokenRefs.length }} words tapped</span
+            >
+          </div>
+          <div
+            class="aspect-video w-full overflow-hidden rounded-lg bg-black shadow-inner"
           >
-            Practice screen
-          </h2>
-          <span v-if="lineMode" class="text-muted-foreground text-xs"
-            >{{ tappedLines }}/{{ lineCount }} lines tapped</span
-          >
-          <span v-else class="text-muted-foreground text-xs"
-            >{{ tappedCount }}/{{ tokenRefs.length }} words tapped</span
-          >
-        </div>
-        <div
-          class="aspect-video w-full overflow-hidden rounded-lg bg-black shadow-inner"
-        >
-          <LyricStage
-            :track="previewTrack"
-            :time="songTime"
-            :title="song.title"
-            :artist="song.artist"
-          />
-        </div>
+            <LyricStage
+              :track="previewTrack"
+              :time="songTime"
+              :title="song.title"
+              :artist="song.artist"
+            />
+          </div>
 
-        <div class="mt-3 flex flex-wrap items-center gap-2">
-          <Button
-            size="sm"
-            :disabled="!song.audio_url"
-            @click="recording ? stopTapping() : startTapping()"
+          <!-- where the song is -->
+          <div
+            v-if="song.audio_url"
+            class="mt-2 flex items-center gap-2 text-xs tabular-nums"
           >
-            {{ recording ? "Stop" : "Start tapping" }}
-          </Button>
-          <template v-if="lineMode">
+            <span class="text-muted-foreground w-9 text-right">{{
+              clock(currentTime)
+            }}</span>
+            <input
+              type="range"
+              class="accent-primary h-1 min-w-0 flex-1"
+              min="0"
+              :max="duration || 0"
+              step="0.1"
+              :value="currentTime"
+              aria-label="Position in the song"
+              @input="onScrub"
+              @pointerup="($event.target as HTMLInputElement).blur()"
+            />
+            <span class="text-muted-foreground w-9">{{ clock(duration) }}</span>
+          </div>
+
+          <div class="mt-3 flex flex-wrap items-center gap-2">
             <Button
               size="sm"
-              variant="outline"
-              :disabled="cuePointer === 0"
-              @click="undoLineTap"
+              :disabled="!song.audio_url"
+              :title="
+                recording ? 'Stop (Enter or Esc)' : 'Start tapping (Enter)'
+              "
+              @click="toggleTapping"
             >
-              Undo last tap
+              {{ recording ? "Stop" : "Start tapping" }}
+              <kbd class="kbd kbd-on-primary">Enter</kbd>
             </Button>
-          </template>
-          <template v-else>
-            <Button
-              size="sm"
-              variant="outline"
-              :disabled="tapPointer === 0"
-              @click="undoLastTap"
-            >
-              Undo last tap
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              :disabled="tapPointer >= tokenRefs.length"
-              @click="skipToken"
-            >
-              Skip word
-            </Button>
-          </template>
-          <span v-if="recording && nextLabel" class="text-sm">
+            <template v-if="lineMode">
+              <Button
+                size="sm"
+                variant="outline"
+                :disabled="cuePointer === 0 || !song.audio_url"
+                title="Tap the last line again (R) -- press again to go back further"
+                @click="retapKey"
+              >
+                <RotateCcw class="size-3.5" /> Re-tap
+                <kbd class="kbd">R</kbd>
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                :disabled="cuePointer === 0"
+                title="Undo the last tap (Backspace)"
+                @click="undoLineTap"
+              >
+                Undo <kbd class="kbd">&#9003;</kbd>
+              </Button>
+            </template>
+            <template v-else>
+              <Button
+                size="sm"
+                variant="outline"
+                :disabled="tapPointer === 0 || !song.audio_url"
+                title="Tap the last word again (R)"
+                @click="retapKey"
+              >
+                <RotateCcw class="size-3.5" /> Re-tap
+                <kbd class="kbd">R</kbd>
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                :disabled="tapPointer === 0"
+                @click="undoLastTap"
+              >
+                Undo <kbd class="kbd">&#9003;</kbd>
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                :disabled="tapPointer >= tokenRefs.length"
+                @click="skipToken"
+              >
+                Skip word <kbd class="kbd">&rarr;</kbd>
+              </Button>
+            </template>
+          </div>
+
+          <p v-if="recording && nextLabel" class="mt-2 text-sm">
             Next: <span class="font-semibold">{{ nextLabel }}</span>
-            &mdash; press Space when it starts
-          </span>
-        </div>
+          </p>
 
-        <div v-if="lineMode && recording" class="mt-3">
           <button
+            v-if="lineMode && recording"
             type="button"
-            class="tap-pad"
+            class="tap-pad mt-2"
             :class="{ 'is-down': pressing }"
             :disabled="!nextLabel"
             @pointerdown.prevent="pressLine"
@@ -1272,15 +1452,210 @@ function formatTime(t: number | null | undefined): string {
             <span class="text-lg font-bold">Tap: line starts</span>
             <span class="text-xs opacity-80">{{ nextLabel }}</span>
           </button>
-          <p class="text-muted-foreground mt-2 text-xs">
-            Press <kbd class="kbd">Space</kbd> (or the pad) the moment each line
-            starts. To mark where a line ends, keep it held while the line is
-            sung and let go when it ends &mdash; otherwise a line lasts until
-            the next tap. Tap at the start of each instrumental break too, and
-            once more where the last line ends.
-            <kbd class="kbd">Backspace</kbd> undoes and backs up a little;
-            <kbd class="kbd">Esc</kbd> stops.
+
+          <!-- shortcuts -->
+          <details open class="mt-3">
+            <summary
+              class="text-muted-foreground cursor-pointer text-xs font-medium select-none"
+            >
+              Keyboard shortcuts
+            </summary>
+            <dl class="shortcuts mt-2">
+              <dt><kbd class="kbd">Enter</kbd></dt>
+              <dd>Start / stop</dd>
+              <dt><kbd class="kbd">Space</kbd></dt>
+              <dd v-if="lineMode">
+                Tap as a line starts &mdash; hold it while the line is sung to
+                mark where it ends
+              </dd>
+              <dd v-else>Tap as each word starts</dd>
+              <dt><kbd class="kbd">R</kbd></dt>
+              <dd>
+                Re-tap: back up and tap the last
+                {{ lineMode ? "line" : "word" }} again (press again to go
+                further back){{
+                  lineMode ? ", or from the line picked in the list" : ""
+                }}
+              </dd>
+              <dt><kbd class="kbd">&#9003;</kbd></dt>
+              <dd>Undo the last tap</dd>
+              <template v-if="lineMode">
+                <dt>
+                  <kbd class="kbd">&uarr;</kbd>&thinsp;<kbd class="kbd"
+                    >&darr;</kbd
+                  >
+                </dt>
+                <dd>Pick a line (when stopped)</dd>
+                <dt><kbd class="kbd">P</kbd></dt>
+                <dd>Play from the picked line / pause</dd>
+                <dt>
+                  <kbd class="kbd">[</kbd>&thinsp;<kbd class="kbd">]</kbd>
+                </dt>
+                <dd>Nudge its tap 0.05 s (with Shift: 0.01 s)</dd>
+              </template>
+              <template v-else>
+                <dt><kbd class="kbd">&rarr;</kbd></dt>
+                <dd>Skip a word</dd>
+              </template>
+              <dt><kbd class="kbd">Esc</kbd></dt>
+              <dd>Stop</dd>
+              <dt><kbd class="kbd">Ctrl</kbd>+<kbd class="kbd">S</kbd></dt>
+              <dd>Save</dd>
+            </dl>
+          </details>
+          <p v-if="lineMode" class="text-muted-foreground mt-2 text-xs">
+            Tap at the start of each instrumental break too, and once more where
+            the last line ends (optional).
           </p>
+        </div>
+
+        <!-- Line taps -->
+        <div v-if="lineMode" class="sync-panel">
+          <div class="mb-1 flex flex-wrap items-center justify-between gap-2">
+            <h2
+              class="text-muted-foreground text-xs font-semibold tracking-wide uppercase"
+            >
+              Line taps
+            </h2>
+            <span class="text-muted-foreground text-xs"
+              >{{ tappedLines }}/{{ lineCount }} tapped</span
+            >
+          </div>
+          <p class="text-muted-foreground mb-2 text-xs">
+            Click a line to pick it, then <kbd class="kbd">R</kbd> re-taps from
+            there, <kbd class="kbd">P</kbd> plays it,
+            <kbd class="kbd">[</kbd>&thinsp;<kbd class="kbd">]</kbd> nudge its
+            tap.
+          </p>
+          <ul ref="cueList" class="cue-list">
+            <li
+              v-for="(cue, i) in cues"
+              :key="i"
+              :data-cue="i"
+              class="cue-row"
+              :class="{
+                'is-next': recording && i === cuePointer,
+                'is-selected': !recording && i === selectedCue,
+                'is-break': cue.kind === 'break',
+              }"
+              @click="selectCue(i)"
+            >
+              <span class="w-20 shrink-0 text-xs tabular-nums">{{
+                formatTime(cue.time)
+              }}</span>
+              <span class="min-w-0 flex-1 truncate text-sm">
+                {{ cueText(cue) }}
+                <span
+                  v-if="cueLine(screens, cue)?.end != null"
+                  class="text-muted-foreground text-xs"
+                  >&nbsp;· ends
+                  {{ formatTime(cueLine(screens, cue)?.end) }}</span
+                >
+              </span>
+              <Button
+                size="icon"
+                variant="ghost"
+                class="size-7"
+                :disabled="cue.time == null || !song.audio_url"
+                :aria-label="`Play from: ${cueText(cue)}`"
+                @click="playFrom(i)"
+                ><Play class="size-3.5"
+              /></Button>
+              <Button
+                size="icon"
+                variant="ghost"
+                class="size-7"
+                :disabled="cue.time == null"
+                aria-label="Earlier"
+                @click="nudgeCue(i, -0.05)"
+                ><Minus class="size-3.5"
+              /></Button>
+              <Button
+                size="icon"
+                variant="ghost"
+                class="size-7"
+                :disabled="cue.time == null"
+                aria-label="Later"
+                @click="nudgeCue(i, 0.05)"
+                ><Plus class="size-3.5"
+              /></Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                class="h-7 px-2 text-xs"
+                :disabled="!song.audio_url"
+                @click="retapFrom(i)"
+                ><RotateCcw class="size-3.5" /> Re-tap</Button
+              >
+            </li>
+            <li
+              v-if="needsEndCue"
+              :data-cue="cues.length"
+              class="cue-row is-break"
+              :class="{
+                'is-next': recording && cuePointer === cues.length,
+                'is-selected': !recording && selectedCue === cues.length,
+              }"
+              @click="selectCue(cues.length)"
+            >
+              <span class="w-20 shrink-0 text-xs tabular-nums">{{
+                lastLine?.end != null ? formatTime(lastLine.end) : "optional"
+              }}</span>
+              <span class="min-w-0 flex-1 truncate text-sm">
+                End of the last line
+                <span
+                  v-if="lastLine?.end == null"
+                  class="text-muted-foreground text-xs not-italic"
+                  >&nbsp;· not needed to save or use the sync &mdash; without it
+                  the last line lasts about as long as its words take</span
+                >
+              </span>
+              <Button
+                size="sm"
+                variant="ghost"
+                class="h-7 px-2 text-xs"
+                :disabled="!song.audio_url"
+                @click="retapFrom(cues.length)"
+                ><RotateCcw class="size-3.5" />
+                {{ lastLine?.end != null ? "Re-tap" : "Tap it" }}</Button
+              >
+            </li>
+          </ul>
+        </div>
+
+        <!-- Word taps -->
+        <div v-else class="sync-panel">
+          <h2
+            class="text-muted-foreground mb-1 text-xs font-semibold tracking-wide uppercase"
+          >
+            Tapped times
+          </h2>
+          <p class="text-muted-foreground mb-2 text-xs">
+            Click a word to clear the taps from there on and jump back to re-tap
+            it (<kbd class="kbd">R</kbd> does it for the last word tapped).
+          </p>
+          <div
+            class="flex min-h-0 flex-1 flex-wrap content-start gap-1.5 overflow-y-auto"
+          >
+            <button
+              v-for="(ref_, i) in tokenRefs"
+              :key="i"
+              type="button"
+              class="rounded border px-1.5 py-0.5 text-xs transition-colors"
+              :class="[
+                i === tapPointer
+                  ? 'border-primary bg-primary/10'
+                  : 'border-transparent',
+                resolveToken(screens, ref_).time != null
+                  ? 'text-foreground'
+                  : 'text-muted-foreground/50',
+              ]"
+              :title="formatTime(resolveToken(screens, ref_).time)"
+              @click="resetFrom(i)"
+            >
+              {{ resolveToken(screens, ref_).text }}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -1536,138 +1911,6 @@ function formatTime(t: number | null | undefined): string {
           </li>
         </ul>
       </div>
-
-      <!-- Line taps -->
-      <div v-if="lineMode" class="bg-card rounded-xl border p-4">
-        <h2
-          class="text-muted-foreground mb-2 text-xs font-semibold tracking-wide uppercase"
-        >
-          Line taps
-        </h2>
-        <p class="text-muted-foreground mb-2 text-xs">
-          &#9654; plays from just before a line. &minus;/+ moves its tap by
-          0.05&nbsp;s. &ldquo;Re-tap&rdquo; clears the taps from there on and
-          backs up so you can tap that stretch again.
-        </p>
-        <ul class="flex flex-col">
-          <li
-            v-for="(cue, i) in cues"
-            :key="i"
-            class="cue-row"
-            :class="{
-              'is-next': recording && i === cuePointer,
-              'is-break': cue.kind === 'break',
-            }"
-          >
-            <span class="w-20 shrink-0 text-xs tabular-nums">{{
-              formatTime(cue.time)
-            }}</span>
-            <span class="min-w-0 flex-1 truncate text-sm">
-              {{ cueText(cue) }}
-              <span
-                v-if="cueLine(screens, cue)?.end != null"
-                class="text-muted-foreground text-xs"
-                >&nbsp;· ends {{ formatTime(cueLine(screens, cue)?.end) }}</span
-              >
-            </span>
-            <Button
-              size="icon"
-              variant="ghost"
-              class="size-7"
-              :disabled="cue.time == null || !song.audio_url"
-              :aria-label="`Play from: ${cueText(cue)}`"
-              @click="playFrom(i)"
-              ><Play class="size-3.5"
-            /></Button>
-            <Button
-              size="icon"
-              variant="ghost"
-              class="size-7"
-              :disabled="cue.time == null"
-              aria-label="Earlier"
-              @click="nudgeCue(i, -0.05)"
-              ><Minus class="size-3.5"
-            /></Button>
-            <Button
-              size="icon"
-              variant="ghost"
-              class="size-7"
-              :disabled="cue.time == null"
-              aria-label="Later"
-              @click="nudgeCue(i, 0.05)"
-              ><Plus class="size-3.5"
-            /></Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              class="h-7 px-2 text-xs"
-              :disabled="!song.audio_url"
-              @click="retapFrom(i)"
-              ><RotateCcw class="size-3.5" /> Re-tap</Button
-            >
-          </li>
-          <li
-            v-if="needsEndCue"
-            class="cue-row is-break"
-            :class="{ 'is-next': recording && cuePointer === cues.length }"
-          >
-            <span class="w-20 shrink-0 text-xs tabular-nums">{{
-              lastLine?.end != null ? formatTime(lastLine.end) : "optional"
-            }}</span>
-            <span class="min-w-0 flex-1 truncate text-sm">
-              End of the last line
-              <span
-                v-if="lastLine?.end == null"
-                class="text-muted-foreground text-xs not-italic"
-                >&nbsp;· not needed to save or use the sync &mdash; without it
-                the last line lasts about as long as its words take</span
-              >
-            </span>
-            <Button
-              size="sm"
-              variant="ghost"
-              class="h-7 px-2 text-xs"
-              :disabled="!song.audio_url"
-              @click="retapFrom(cues.length)"
-              ><RotateCcw class="size-3.5" />
-              {{ lastLine?.end != null ? "Re-tap" : "Tap it" }}</Button
-            >
-          </li>
-        </ul>
-      </div>
-
-      <!-- Word taps -->
-      <div v-else class="bg-card rounded-xl border p-4">
-        <h2
-          class="text-muted-foreground mb-2 text-xs font-semibold tracking-wide uppercase"
-        >
-          Tapped times
-        </h2>
-        <p class="text-muted-foreground mb-2 text-xs">
-          Click a word to clear the taps from there on and jump back to re-tap
-          it.
-        </p>
-        <div class="flex max-h-64 flex-wrap gap-1.5 overflow-y-auto">
-          <button
-            v-for="(ref_, i) in tokenRefs"
-            :key="i"
-            type="button"
-            class="rounded border px-1.5 py-0.5 text-xs transition-colors"
-            :class="[
-              i === tapPointer
-                ? 'border-primary bg-primary/10'
-                : 'border-transparent',
-              resolveToken(screens, ref_).time != null
-                ? 'text-foreground'
-                : 'text-muted-foreground/50',
-            ]"
-            :title="formatTime(resolveToken(screens, ref_).time)"
-            @click="resetFrom(i)"
-          >
-            {{ resolveToken(screens, ref_).text }}
-          </button>
-        </div>
-      </div>
     </div>
 
     <div
@@ -1791,6 +2034,16 @@ function formatTime(t: number | null | undefined): string {
   border-radius: 0.5rem;
   border: 1px solid transparent;
 }
+.cue-row {
+  cursor: pointer;
+}
+.cue-row:hover {
+  background: color-mix(in oklab, var(--muted) 60%, transparent);
+}
+.cue-row.is-selected {
+  border-color: color-mix(in oklab, var(--foreground) 35%, transparent);
+  background: var(--muted);
+}
 .cue-row.is-next {
   border-color: var(--primary);
   background: color-mix(in oklab, var(--primary) 8%, transparent);
@@ -1805,5 +2058,70 @@ function formatTime(t: number | null | undefined): string {
   border-radius: 0.25rem;
   background: var(--muted);
   font-size: 0.7rem;
+}
+.kbd-on-primary {
+  border-color: color-mix(in oklab, var(--primary-foreground) 40%, transparent);
+  background: transparent;
+  color: inherit;
+}
+/* The practice screen and the taps side by side on a wide screen (one
+   above the other on a narrow one), each kept in view while you tap. */
+.sync-split {
+  display: grid;
+  gap: 1rem;
+  align-items: start;
+}
+.sync-panel {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  background: var(--card);
+}
+.sync-panel:not(.sync-practice) {
+  max-height: 70vh;
+}
+.cue-list {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+@media (min-width: 1024px) {
+  .sync-split {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+  .sync-panel {
+    position: sticky;
+    top: 0.75rem;
+    max-height: calc(100dvh - 6.5rem);
+  }
+  .sync-panel:not(.sync-practice) {
+    height: calc(100dvh - 6.5rem);
+  }
+  .sync-practice {
+    overflow-y: auto;
+  }
+}
+@media (min-width: 1536px) {
+  .sync-split {
+    grid-template-columns: minmax(0, 5fr) minmax(0, 4fr);
+  }
+}
+.shortcuts {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.25rem 0.6rem;
+  align-items: baseline;
+  font-size: 0.75rem;
+  color: var(--muted-foreground);
+}
+.shortcuts dt {
+  white-space: nowrap;
+  text-align: right;
 }
 </style>

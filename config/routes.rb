@@ -46,6 +46,9 @@ Rails.application.routes.draw do
   # Guitar chord charts with search ("what's a C#m7?").
   get "chords", to: "chords#index", as: :chords
 
+  # The user's guide ("How to"), with every keyboard shortcut.
+  get "help", to: "help#index", as: :help
+
   # Everyone's own setlists, for performing solo (a group's are under
   # /groups/:group_id/setlists).
   resources :my_setlists, path: "setlists" do

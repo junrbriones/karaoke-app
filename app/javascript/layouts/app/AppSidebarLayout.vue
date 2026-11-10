@@ -17,7 +17,10 @@ withDefaults(defineProps<Props>(), {
 <template>
   <AppShell variant="sidebar">
     <AppSidebar />
-    <AppContent variant="sidebar" class="overflow-x-hidden">
+    <!-- overflow-x-clip, not -hidden: "hidden" turns this into a scroll
+         container, which stops sticky panels (the karaoke sync's side by
+         side, the guide's contents) from staying in view. -->
+    <AppContent variant="sidebar" class="overflow-x-clip">
       <AppSidebarHeader :breadcrumbs="breadcrumbs" />
       <slot />
     </AppContent>

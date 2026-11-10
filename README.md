@@ -178,6 +178,18 @@ ticked songs (up to 200 at a time) all together: if any can't be saved,
 none are, and the reason shows against that song so it can be fixed or
 unticked. Import only chord sheets you have the right to use.
 
+## How to (the user's guide)
+
+**How to** in the sidebar (`/help`, `pages/help/index.vue`) is a guide for
+everyone using the app: getting around, songs and the chord-sheet format,
+importing, chords, setlists, groups and Live Sync, Stage Mode, line timing,
+karaoke sync and its timing marks, vocals and minus-one tracks, and account
+help -- with every keyboard shortcut in tables. A search box shows just the
+sections that mention what you type, the contents list stays in view, and
+links can go straight to a section (`/help#karaoke-sync`; the karaoke sync
+page's **How to sync** button does). Admins also see a "For admins"
+section. When a feature changes, update this page along with this README.
+
 ## Guitar chord charts
 
 **Chords** in the sidebar (`/chords`) is a chord dictionary for anyone
@@ -656,13 +668,31 @@ and press `Space` (or the big pad) the moment each **line** starts.
   line, &minus;/+ moves a tap by 0.05 s, and **Re-tap** clears the taps
   from there on and backs up so you can redo just that stretch.
   `Backspace` undoes the last tap (and backs up a little); `Esc` stops.
+- **Side by side**: on a wide screen the practice screen and the Line taps
+  list sit next to each other and both stay in view while you scroll, so
+  you can watch the lyrics and the taps at once. The list follows the line
+  you're about to tap. Under the practice screen there's a position slider,
+  and the buttons show their keys.
+- **Keyboard shortcuts** (line mode):
+
+  | Key | What it does |
+  | --- | --- |
+  | `Enter` | Start / stop tapping |
+  | `Space` | Tap as a line starts (hold it while the line is sung to mark where it ends) |
+  | `R` | Re-tap: back up and tap the last line again; press again to go back one more line. When stopped, re-taps from the line picked in the list |
+  | `Backspace` | Undo the last tap |
+  | `↑` / `↓` | Pick a line in the list (when stopped; clicking a line picks it too) |
+  | `P` | Play from the picked line; again to pause |
+  | `[` / `]` | Nudge the picked line's tap 0.05 s earlier/later (with `Shift`: 0.01 s) |
+  | `Esc` | Stop |
+  | `Ctrl`/`⌘`+`S` | Save |
 
 Everything is worked out from the line taps, so changing the tempo, the
 snapping or the marks re-places the words instantly, without re-tapping.
 
 *Tap each word*, for exact control: `Space` as each word or syllable
 starts. `←`/Backspace undoes the last tap, `→` skips a word without timing
-it, `Esc` stops. Click any word in the **Tapped times** list to clear every
+it, `Enter` starts/stops, `R` re-taps the last word, `Esc` stops. Click any word in the **Tapped times** list to clear every
 tap from that point on and rewind the audio to just before it. Switching
 from line to word mode starts from the word times the line taps placed, so
 you can line-sync the song and then re-tap only the words that need it

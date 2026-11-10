@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Link, usePage } from "@inertiajs/vue3"
 import {
+  CircleHelp,
   Guitar,
   ListMusic,
   ListOrdered,
@@ -21,7 +22,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar"
-import { adminUsers, chords, groups, mySetlists, songs } from "@/routes"
+import { adminUsers, chords, groups, help, mySetlists, songs } from "@/routes"
 import { type NavItem, type User } from "@/types"
 
 import AppLogo from "./AppLogo.vue"
@@ -49,6 +50,11 @@ const mainNavItems = computed<NavItem[]>(() => {
       title: "Chords",
       href: chords.index().url,
       icon: Guitar,
+    },
+    {
+      title: "How to",
+      href: help.index().url,
+      icon: CircleHelp,
     },
   ]
 
