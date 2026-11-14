@@ -34,6 +34,22 @@ RSpec.describe "Song karaoke sync (phrasing)", type: :request do
     expect(song.phrasing.dig("screens", 0, "lines", 0, "start")).to eq(1.0)
   end
 
+  it "saves the line timing worked out from the sync along with it (one timing for both)" do
+    timing = { version: 2, bpm: 112, source: "external", end: 3.5, lines: { "Verse#0" => { text: "Tayo ay magsaya", start: 1.0 } } }
+    patch song_phrasing_path(song), params: { phrasing: phrasing.to_json, line_timing: timing.to_json }
+
+    song.reload
+    expect(song.phrasing.dig("screens", 0, "lines", 0, "start")).to eq(1.0)
+    expect(song.line_timing).to include("version" => 2, "source" => "external", "end" => 3.5)
+    expect(song.line_timing.dig("lines", "Verse#0", "start")).to eq(1.0)
+  end
+
+  it "leaves the line timing alone when none is sent" do
+    song.update!(line_timing: { "version" => 2, "lines" => { "Verse#0" => { "text" => "Tayo ay magsaya", "start" => 4.0 } } })
+    patch song_phrasing_path(song), params: { phrasing: phrasing.to_json }
+    expect(song.reload.line_timing.dig("lines", "Verse#0", "start")).to eq(4.0)
+  end
+
   it "keeps an uploaded track with the song and describes it to the owner" do
     pcm = "\x00\x00" * 800
     wav = "RIFF".b + [ 36 + pcm.bytesize ].pack("V") + "WAVEfmt ".b +

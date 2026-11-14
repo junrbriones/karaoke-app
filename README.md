@@ -541,6 +541,24 @@ beats per line, count-in, scroll speed and pace) are remembered per device.
 
 ### Line timing
 
+**One timing for both.** Line timing and the karaoke sync's line taps are
+the same thing &mdash; when each line of the song starts &mdash; so you only
+tap a song once. Saving either page saves the other too
+(`lib/sharedTiming.ts`): the karaoke sync's lyric lines are matched to the
+chord sheet's lines by their words, in order. From the karaoke sync, each
+matched sheet line starts when its lyric line does, an `[Instrumental]`
+break's tap starts the chord-only line (intro, interlude) after the line
+before it, and lines in between share out the time; from Line timing, each
+matched lyric line takes its sheet line's start, a break starts with the
+chord-only line after the line before it, the last line ends where the
+sheet says, and the words are placed from the line starts (the tempo found
+from them, if the sync has none). Lines that don't match &mdash; text edited
+on one side only &mdash; keep what they had, and the save bar says how many
+matched. A karaoke sync tapped **word by word** is more exact than line
+starts, so Line timing leaves it as it is (the karaoke sync still updates
+Line timing). Each page has an **Update &hellip; too** box in its save bar
+to turn this off.
+
 A flat "every line is one bar" can't keep up with a real song: some lines
 are held for two bars, some rush by in half of one, and an intro may be
 longer than its chords suggest. **Line timing** (the button on a song you
@@ -639,6 +657,35 @@ after that (the box shows the saved file's name, size and upload date;
 under **How to sync**. Taps are read from the real `currentTime` of the
 `<audio>` element (not the throttled `timeupdate` event), so they land at
 real millisecond precision.
+
+**Music from another app.** No audio uploaded &mdash; or a recording you'd
+rather not upload? Under **Play the music from**, pick **Another app or
+device** (Spotify, YouTube, Apple Music, a CD...; it's the default for a
+song without audio). The page keeps time with a stopwatch, from when the
+music starts, so the times match the music player's own clock:
+
+- Press `Enter`, then `Space` the moment you start the music (that starts
+  the stopwatch); then tap `Space` as each line (or word) starts, as usual.
+- To redo a stretch (`R`, `Backspace`, **Re-tap** or **Tap the rest**), play
+  the music from a little before the line (or word) *before* it and tap that
+  one first: it lines the stopwatch up with the music again, and the next
+  `Space` taps the line. &#9654; and `P` run the preview silently from a line.
+- Every time in the **Line taps** list can be typed in, read off the music
+  player as the line starts (`1:23.45` or `83.45`; Enter keeps it, Esc
+  cancels, an empty box clears it), and times out of order are flagged.
+  With **Move the later lines too** ticked, changing one time moves all the
+  later ones by as much &mdash; e.g. type the player's time for the first
+  line to line the taps up with the player's clock, then untick it to fix
+  single lines.
+- In **Stage Mode** such a sync plays silently, even if the song has audio
+  uploaded: no count-in, "Press ▶ Play as you start the music", and the
+  lyrics follow from there. Settings &rarr; **Lyrics** Earlier/Later
+  (0.25 s a press) lines them up with the music while it plays; Tempo
+  speeds them up or slows them down. (Vocals isn't offered &mdash; there's
+  no recording to mask.)
+
+The sync remembers what it was timed against (`sync.source`: `"audio"` or
+`"external"`).
 
 **Saving.** **Save sync** (or `Ctrl+S` / `⌘S`) saves the lyrics with
 their timing marks, the taps, and the tempo and snapping; it works at any

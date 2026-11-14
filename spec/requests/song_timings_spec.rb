@@ -54,6 +54,28 @@ RSpec.describe "Song line timing", type: :request do
     )
   end
 
+  it "saves the karaoke sync worked out from the timing along with it (one timing for both)" do
+    timing = { version: 2, bpm: 100, source: "external", lines: { "Verse#0" => { text: "Tayo ay magsaya", start: 2.5 } } }
+    phrasing = {
+      sourceText: "Tayo ay magsaya", complete: true,
+      sync: { mode: "line", bpm: 100, phase: 0, grid: 2, source: "external" },
+      screens: [ { label: nil, instrumental: false, lines: [ { start: 2.5, tokens: [ { text: "Tayo", wordStart: true, time: 2.5 } ] } ] } ]
+    }
+    patch song_timing_path(song), params: { line_timing: timing.to_json, phrasing: phrasing.to_json }
+
+    song.reload
+    expect(song.line_timing.dig("lines", "Verse#0", "start")).to eq(2.5)
+    expect(song.phrasing.dig("screens", 0, "lines", 0, "start")).to eq(2.5)
+    expect(song.phrasing.dig("sync", "source")).to eq("external")
+  end
+
+  it "ignores a karaoke sync that isn't one" do
+    timing = { version: 2, bpm: 100, lines: { "Verse#0" => { text: "Tayo ay magsaya", start: 2.5 } } }
+    patch song_timing_path(song), params: { line_timing: timing.to_json, phrasing: "{not json" }
+    expect(song.reload.line_timing.dig("lines", "Verse#0", "start")).to eq(2.5)
+    expect(song.phrasing).to be_nil
+  end
+
   it "ignores an unknown source" do
     timing = { version: 2, bpm: 96, source: "radio", lines: { "Verse#0" => { text: "Tayo ay magsaya", start: 1 } } }
     patch song_timing_path(song), params: { line_timing: timing.to_json }

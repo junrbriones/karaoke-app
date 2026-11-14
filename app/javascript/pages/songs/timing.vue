@@ -11,6 +11,7 @@ import { useMediaClock } from "@/composables/useMediaClock"
 import AppLayout from "@/layouts/AppLayout.vue"
 import { parseBody } from "@/lib/chordSheet"
 import {
+  type LineTiming,
   NUDGE,
   type TimedLine,
   formatClockTime,
@@ -21,6 +22,7 @@ import {
   savedStart,
   timedLines,
 } from "@/lib/lineTiming"
+import { syncFromLineTiming, syncIsWordTapped } from "@/lib/sharedTiming"
 import { buildTimeline, guideAt } from "@/lib/tempoGuide"
 import { help, songs as songsRoutes, songsTimings } from "@/routes"
 import type { BreadcrumbItem, Song } from "@/types"
@@ -560,7 +562,7 @@ function lengthLabel(i: number): string {
 }
 
 /* ---- save ---- */
-function payload() {
+function payload(): LineTiming | null {
   const entries: Record<string, { text: string; start: number }> = {}
   for (const line of lines.value) {
     const s = starts.value[line.id]
@@ -570,7 +572,7 @@ function payload() {
   return {
     version: 2,
     bpm: bpm.value,
-    source: external.value ? "external" : "audio",
+    source: (external.value ? "external" : "audio") as "external" | "audio",
     end: endTime.value,
     lines: entries,
   }
@@ -580,19 +582,43 @@ const saved = ref(snapshot())
 const dirty = computed(() => snapshot() !== saved.value)
 const saving = ref(false)
 const saveError = ref<string | null>(null)
+// One timing for both: saving here also gives the karaoke sync these
+// line starts (a word-by-word sync is kept as it is).
+const shareTiming = useLocalStorage("chordstage:share-timing", true, {
+  initOnMounted: true,
+})
+const sharedNote = ref<string | null>(null)
+const wordTapped = computed(() => syncIsWordTapped(props.song.phrasing))
+
 function save() {
   const data = payload()
   saving.value = true
   saveError.value = null
+  const shared =
+    shareTiming.value && data && !wordTapped.value
+      ? syncFromLineTiming(blocks.value, data, props.song.phrasing, {
+          songTempo: bpm.value,
+          source: data.source ?? "audio",
+        })
+      : null
   router.patch(
     songsTimings.update({ song_id: props.song.slug }).url,
-    { line_timing: data ? JSON.stringify(data) : "", tempo: bpm.value },
+    {
+      line_timing: data ? JSON.stringify(data) : "",
+      tempo: bpm.value,
+      phrasing: shared ? JSON.stringify(shared.value) : undefined,
+    },
     {
       preserveScroll: true,
       preserveState: true,
       onSuccess: () => {
         saved.value = snapshot()
         converted.value = false
+        sharedNote.value = shared
+          ? `Karaoke sync updated too (${shared.matched} of ${shared.total} lyric lines matched${shared.value.complete ? "" : " — finish the rest on the Karaoke sync page"}).`
+          : shareTiming.value && wordTapped.value
+            ? "The karaoke sync was tapped word by word, so it's kept as it is."
+            : null
       },
       onError: () => {
         saveError.value = "Couldn't save. Your taps are still here; try again."
@@ -1293,7 +1319,17 @@ onBeforeUnmount(() => {
           "
         >
           {{ dirty ? "Unsaved changes" : "All changes saved" }}
+          <template v-if="!dirty && sharedNote">
+            &middot; {{ sharedNote }}</template
+          >
         </span>
+        <label
+          class="text-muted-foreground flex items-center gap-1.5 text-xs"
+          title="Line timing and the karaoke sync are one timing: saving here gives the karaoke sync's lyric lines these times too"
+        >
+          <input v-model="shareTiming" type="checkbox" class="accent-primary" />
+          Update karaoke sync too
+        </label>
         <Button
           :disabled="!dirty || saving"
           title="Save timing (Ctrl+S / ⌘S)"

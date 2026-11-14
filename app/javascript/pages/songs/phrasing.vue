@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Head, Link, router } from "@inertiajs/vue3"
-import { useDebounceFn } from "@vueuse/core"
+import { useDebounceFn, useLocalStorage } from "@vueuse/core"
 import { Minus, Play, Plus, RotateCcw } from "lucide-vue-next"
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue"
 
@@ -23,6 +23,7 @@ import {
   fitPhase,
   onsetsOf,
 } from "@/lib/lineSync"
+import { formatClockTime, parseClockTime } from "@/lib/lineTiming"
 import { fromPhrasing } from "@/lib/lyricDisplay"
 import {
   type PhrasingLine,
@@ -38,6 +39,7 @@ import {
   rehydrateTimes,
   resolveToken,
 } from "@/lib/phrasing"
+import { lineTimingFromSync } from "@/lib/sharedTiming"
 import { help, songs as songsRoutes, songsPhrasings } from "@/routes"
 import type { BreadcrumbItem, Song } from "@/types"
 
@@ -74,6 +76,12 @@ const sync = ref<PhrasingSync>({
   bpm: initialPhrasing?.sync?.bpm ?? null,
   phase: initialPhrasing?.sync?.phase ?? null,
   grid: initialPhrasing?.sync?.grid ?? 2,
+  ...(initialPhrasing?.sync?.pace != null
+    ? { pace: initialPhrasing.sync.pace }
+    : {}),
+  ...(initialPhrasing?.sync?.source
+    ? { source: initialPhrasing.sync.source }
+    : {}),
 })
 const lineMode = computed(() => sync.value.mode === "line")
 
@@ -201,12 +209,23 @@ const nextLabel = computed(() => {
   const ref_ = tokenRefs.value[tapPointer.value]
   return ref_ ? `“${resolveToken(screens.value, ref_).text}”` : null
 })
+// The line (or word) before the next tap: what to tap to line the
+// stopwatch up with music playing elsewhere.
+const anchorLabel = computed(() => {
+  if (lineMode.value) {
+    const cue = cues.value[cuePointer.value - 1]
+    if (!cue) return ""
+    return cue.kind === "break" ? "the instrumental break" : `“${cueText(cue)}”`
+  }
+  const ref_ = tokenRefs.value[tapPointer.value - 1]
+  return ref_ ? `“${resolveToken(screens.value, ref_).text}”` : ""
+})
 
 /* ---- audio + playback time ---- */
 const audioPlayer = ref<HTMLAudioElement | null>(null)
 // Read every frame while playing, so the preview's sweep is as smooth as
 // it'll be on the TV.
-const { time: currentTime } = useMediaClock(audioPlayer)
+const { time: currentTime, playing: audioPlaying } = useMediaClock(audioPlayer)
 
 /* ---- what plays while you sync: the original, the original with its
    lead vocal masked, or the song's minus-one track. Everything (taps, the
@@ -235,10 +254,92 @@ const audioSrc = computed(
 )
 const vocalLevel = computed(() => (listen.value === "masked" ? 0 : 1))
 const fx = useTrackFx(audioPlayer, ref(0), vocalLevel)
-// Where the song is, on the original recording's clock.
-const songTime = computed(() => currentTime.value - playOffset.value)
+/* ---- where the music plays: this song's audio, or another app or
+   device (Spotify, YouTube, a CD...) -- then a stopwatch keeps time, and
+   the times are the music's own (from when it starts) ---- */
+type Source = "audio" | "external"
+const hasAudio = !!props.song.audio_url
+const source = computed<Source>({
+  get: () =>
+    !hasAudio || sync.value.source === "external" ? "external" : "audio",
+  set: (value) => {
+    stopTapping()
+    pauseMedia()
+    sync.value = { ...sync.value, source: value }
+  },
+})
+const external = computed(() => source.value === "external")
+
+const watchTime = ref(0)
+const watchRunning = ref(false)
+let watchZero = 0
+let watchRaf: number | null = null
+function watchTick() {
+  watchRaf = null
+  if (!watchRunning.value) return
+  watchTime.value = (performance.now() - watchZero) / 1000
+  watchRaf = requestAnimationFrame(watchTick)
+}
+function watchStart(at = watchTime.value) {
+  watchZero = performance.now() - at * 1000
+  watchTime.value = at
+  watchRunning.value = true
+  if (watchRaf == null) watchRaf = requestAnimationFrame(watchTick)
+}
+function watchStop() {
+  if (watchRunning.value)
+    watchTime.value = (performance.now() - watchZero) / 1000
+  watchRunning.value = false
+  if (watchRaf != null) cancelAnimationFrame(watchRaf)
+  watchRaf = null
+}
+onBeforeUnmount(watchStop)
+
+// Where the song is, on the original recording's clock (or the
+// stopwatch's, for music playing elsewhere).
+const songTime = computed(() =>
+  external.value ? watchTime.value : currentTime.value - playOffset.value,
+)
 function nowSong(): number {
+  if (external.value) {
+    return watchRunning.value
+      ? (performance.now() - watchZero) / 1000
+      : watchTime.value
+  }
   return (audioPlayer.value?.currentTime ?? 0) - playOffset.value
+}
+const canPlay = computed(() => external.value || hasAudio)
+const mediaRunning = computed(() =>
+  external.value ? watchRunning.value : audioPlaying.value,
+)
+function playMedia() {
+  if (external.value) watchStart()
+  else void audioPlayer.value?.play()
+}
+function pauseMedia() {
+  watchStop()
+  audioPlayer.value?.pause()
+}
+// Music elsewhere: the first Space after starting lines the stopwatch up
+// -- with the music starting, or with the last thing already tapped.
+const waiting = ref(false)
+// The time of the tap just before the next one, if there is one.
+function anchorTime(): number | null {
+  if (lineMode.value) return cueTime(cuePointer.value - 1)
+  const prev = tokenRefs.value[tapPointer.value - 1]
+  return prev ? resolveToken(screens.value, prev).time : null
+}
+// True when that Space only lined the stopwatch up (nothing to record).
+function lineUpStopwatch(): boolean {
+  if (!external.value || !waiting.value) return false
+  waiting.value = false
+  watchStart(anchorTime() ?? 0)
+  return true
+}
+function waitForLineUp() {
+  watchStop()
+  watchTime.value = Math.max(0, anchorTime() ?? 0)
+  waiting.value = true
 }
 // Switching files mid-song carries on from the same spot. (Changing the
 // offset doesn't move the audio -- the lyrics move, so you can line them
@@ -278,7 +379,10 @@ function round3(x: number): number {
 }
 // Seeks to a moment of the song (on the original's clock).
 function seek(t: number) {
-  if (audioPlayer.value) {
+  if (external.value) {
+    if (watchRunning.value) watchStart(Math.max(0, t))
+    else watchTime.value = Math.max(0, t)
+  } else if (audioPlayer.value) {
     audioPlayer.value.currentTime = Math.max(0, t + playOffset.value)
   }
 }
@@ -287,18 +391,20 @@ function seek(t: number) {
 const recording = ref(false)
 
 function startTapping() {
-  if (!audioPlayer.value) return
+  if (!canPlay.value) return
   if (lineMode.value && cuePointer.value >= totalCues.value) {
     cuePointer.value = firstUntappedCue()
   }
   recording.value = true
-  void audioPlayer.value.play()
+  if (external.value) waitForLineUp()
+  else playMedia()
 }
 function stopTapping() {
   recording.value = false
   held = null
   pressing.value = false
-  audioPlayer.value?.pause()
+  waiting.value = false
+  pauseMedia()
 }
 
 /* -- line mode: press as each line starts; hold while it's sung and let
@@ -308,8 +414,8 @@ let held: { line: PhrasingLine; at: number } | null = null
 const pressing = ref(false)
 
 function pressLine() {
-  const audio = audioPlayer.value
-  if (!recording.value || !audio || pressing.value) return
+  if (!recording.value || pressing.value || !canPlay.value) return
+  if (lineUpStopwatch()) return
   const t = round3(nowSong())
   const i = cuePointer.value
   pressing.value = true
@@ -335,13 +441,12 @@ function pressLine() {
   cuePointer.value = nextUntappedCue(i + 1)
   if (cuePointer.value >= totalCues.value) {
     recording.value = false
-    audio.pause()
+    pauseMedia()
   }
 }
 function releaseLine() {
   pressing.value = false
-  const audio = audioPlayer.value
-  if (!held || !audio) return
+  if (!held) return
   const t = nowSong()
   if (t - held.at >= HOLD_MIN) held.line.end = round3(t)
   held = null
@@ -369,6 +474,11 @@ function cueTime(i: number): number | null {
 function undoLineTap() {
   if (cuePointer.value === 0) return
   const i = cuePointer.value - 1
+  // Music elsewhere can't be rewound from here: tap it again from there.
+  if (external.value) {
+    retapFrom(i)
+    return
+  }
   const was = cueTime(i)
   clearCue(i)
   cuePointer.value = i
@@ -376,13 +486,122 @@ function undoLineTap() {
   if (was != null) seek(was - 2.5)
 }
 // Clears the taps from this line on and backs up to just before it.
+// With music elsewhere, play it from a little before the line before and
+// tap that line first: that lines the stopwatch up again.
 function retapFrom(i: number) {
   const back = cueTime(i) ?? cueTime(i - 1) ?? 0
   for (let k = i; k < totalCues.value; k++) clearCue(k)
   cuePointer.value = i
+  if (external.value) {
+    if (!recording.value) {
+      recording.value = true
+      selectedCue.value = null
+    }
+    waitForLineUp()
+    return
+  }
   seek(back - 2.5)
   if (!recording.value) startTapping()
 }
+/* -- times typed in, e.g. read off the music player's clock -- */
+// With it on, changing a line's time moves every later tap by as much --
+// handy to line taps made with the stopwatch up with the player's clock.
+const shiftLater = useLocalStorage("chordstage:sync-shift-later", false, {
+  initOnMounted: true,
+})
+const timeErrors = ref<Record<number, string>>({})
+function timeText(i: number): string {
+  const t = cueTime(i)
+  return t == null ? "" : formatClockTime(t)
+}
+function setCueTime(i: number, t: number) {
+  if (i >= cues.value.length) {
+    if (lastLine.value) lastLine.value.end = round3(t)
+    return
+  }
+  const cue = cues.value[i]
+  const screen = screens.value[cue.screenIndex]
+  if (cue.kind === "break") {
+    screen.start = round3(t)
+  } else {
+    const line = screen.lines[cue.lineIndex]
+    line.start = round3(t)
+    if (line.end != null && line.end <= line.start) line.end = null
+  }
+}
+function onTimeFocus(e: FocusEvent) {
+  const input = e.target as HTMLInputElement
+  input.dataset.was = input.value
+  input.select()
+}
+function onTimeKeydown(e: KeyboardEvent) {
+  const input = e.target as HTMLInputElement
+  if (e.key === "Enter") {
+    e.preventDefault()
+    input.blur()
+  } else if (e.key === "Escape") {
+    e.preventDefault()
+    input.value = input.dataset.was ?? input.value
+    input.blur()
+  }
+}
+function commitTime(i: number, e: Event) {
+  const input = e.target as HTMLInputElement
+  const t = parseClockTime(input.value)
+  const errors = { ...timeErrors.value }
+  delete errors[i]
+  if (t != null && Number.isNaN(t)) {
+    errors[i] = "Type a time like 1:23.45"
+    timeErrors.value = errors
+    input.value = timeText(i)
+    return
+  }
+  timeErrors.value = errors
+  const old = cueTime(i)
+  if (t == null) {
+    clearCue(i)
+  } else {
+    if (old != null && shiftLater.value && t !== old) {
+      shiftFrom(i, t - old)
+    } else {
+      setCueTime(i, t)
+    }
+  }
+  input.value = timeText(i)
+  if (!recording.value) cuePointer.value = firstUntappedCue()
+}
+// Moves cue `i` and everything after it by `delta` seconds: line starts,
+// break starts and held line ends (the last line's end is the end cue).
+function shiftFrom(i: number, delta: number) {
+  const move = (x: number) => round3(Math.max(0, x + delta))
+  if (i >= cues.value.length) {
+    if (lastLine.value?.end != null)
+      lastLine.value.end = move(lastLine.value.end)
+    return
+  }
+  for (let k = i; k < cues.value.length; k++) {
+    const cue = cues.value[k]
+    const screen = screens.value[cue.screenIndex]
+    if (cue.kind === "break") {
+      if (screen.start != null) screen.start = move(screen.start)
+    } else {
+      const line = screen.lines[cue.lineIndex]
+      if (line.start != null) line.start = move(line.start)
+      if (line.end != null) line.end = move(line.end)
+    }
+  }
+}
+// A time that isn't after the one before it.
+function outOfOrder(i: number): boolean {
+  const t = cueTime(i)
+  if (t == null) return false
+  for (let k = i - 1; k >= 0; k--) {
+    const prev = cueTime(k)
+    if (prev != null) return t <= prev
+  }
+  return false
+}
+
 function nudgeCue(i: number, delta: number) {
   const cue = cues.value[i]
   if (!cue || cue.time == null) return
@@ -391,16 +610,20 @@ function nudgeCue(i: number, delta: number) {
   if (cue.kind === "break") screen.start = t
   else screen.lines[cue.lineIndex].start = t
 }
+// Plays (or, with music elsewhere, runs the preview silently) from just
+// before a line.
 function playFrom(i: number) {
   const t = cueTime(i)
-  if (t == null || !audioPlayer.value) return
+  if (t == null || !canPlay.value) return
+  if (recording.value) stopTapping()
   seek(t - 2)
-  void audioPlayer.value.play()
+  playMedia()
 }
 
 /* -- word mode: a tap as each word starts -- */
 function tapNext() {
-  if (!audioPlayer.value) return
+  if (!canPlay.value) return
+  if (lineUpStopwatch()) return
   const ref_ = tokenRefs.value[tapPointer.value]
   if (!ref_) {
     stopTapping()
@@ -416,6 +639,10 @@ function tapNext() {
 }
 function undoLastTap() {
   if (tapPointer.value === 0) return
+  if (external.value) {
+    resetFrom(tapPointer.value - 1)
+    return
+  }
   tapPointer.value--
   const ref_ = tokenRefs.value[tapPointer.value]
   if (ref_) {
@@ -438,6 +665,10 @@ function resetFrom(index: number) {
     delete token.end
   }
   tapPointer.value = index
+  if (external.value) {
+    if (recording.value) waitForLineUp()
+    return
+  }
   const prevRef = index > 0 ? tokenRefs.value[index - 1] : null
   const prevTime = prevRef ? resolveToken(screens.value, prevRef).time : null
   seek(prevTime != null ? prevTime - 0.5 : 0)
@@ -457,19 +688,20 @@ const remainingText = computed(() => {
 // Jumps to the first line (or word) not tapped yet, backs up a little and
 // starts tapping from there.
 function tapRest() {
-  if (!audioPlayer.value) return
+  if (!canPlay.value) return
   if (lineMode.value) {
     const i = firstUntappedCue()
     if (i >= totalCues.value) return
     cuePointer.value = i
-    seek((cueTime(i - 1) ?? 2) - 2)
+    if (!external.value) seek((cueTime(i - 1) ?? 2) - 2)
   } else {
     tapPointer.value = firstUntappedIndex()
     const prev = tokenRefs.value[tapPointer.value - 1]
     const t = prev ? resolveToken(screens.value, prev).time : null
-    seek((t ?? 1) - 1)
+    if (!external.value) seek((t ?? 1) - 1)
   }
   if (!recording.value) startTapping()
+  else if (external.value) waitForLineUp()
 }
 
 /* ---- switching modes keeps what's been done ---- */
@@ -609,7 +841,7 @@ function onDurationChange() {
 }
 function onScrub(e: Event) {
   const el = audioPlayer.value
-  if (!el) return
+  if (!el || external.value) return
   el.currentTime = Number((e.target as HTMLInputElement).value)
 }
 function clock(t: number): string {
@@ -625,7 +857,7 @@ function toggleTapping() {
 // R: tap again from the line just tapped (press it again to go back one
 // more), or from the line picked in the list.
 function retapKey() {
-  if (!audioPlayer.value) return
+  if (!canPlay.value) return
   if (lineMode.value) {
     const i =
       recording.value || selectedCue.value == null
@@ -635,21 +867,24 @@ function retapKey() {
     retapFrom(i)
   } else {
     if (tapPointer.value === 0 && recording.value) return
-    resetFrom(Math.max(0, tapPointer.value - 1))
-    if (!recording.value) startTapping()
+    const from = Math.max(0, tapPointer.value - 1)
+    if (!recording.value) {
+      tapPointer.value = from
+      startTapping()
+    }
+    resetFrom(from)
   }
 }
 // P: listen from the picked line (or the last one tapped); again to pause.
 function playSelected() {
-  const el = audioPlayer.value
-  if (!el) return
-  if (!el.paused) {
-    el.pause()
+  if (!canPlay.value) return
+  if (mediaRunning.value) {
+    pauseMedia()
     return
   }
   const i = selectedCue.value ?? Math.max(0, cuePointer.value - 1)
   if (cueTime(i) != null) playFrom(i)
-  else void el.play()
+  else playMedia()
 }
 
 function isTypingTarget(target: EventTarget | null): boolean {
@@ -681,7 +916,7 @@ function onKeydown(e: KeyboardEvent) {
   }
   if (e.key === "Escape") {
     if (recording.value) stopTapping()
-    else audioPlayer.value?.pause()
+    else pauseMedia()
     return
   }
   if (e.key.toLowerCase() === "r") {
@@ -924,6 +1159,12 @@ const savedAt = ref<Date | null>(null)
 /* ---- save ---- */
 const saving = ref(false)
 const saveError = ref<string | null>(null)
+// Saving also gives the chord sheet's Line timing these line starts.
+const shareTiming = useLocalStorage("chordstage:share-timing", true, {
+  initOnMounted: true,
+})
+const sharedNote = ref<string | null>(null)
+
 function save() {
   if (saving.value) return
   // Words or marks typed in the last moment haven't been applied yet.
@@ -935,22 +1176,40 @@ function save() {
     sourceText: sourceText.value,
     complete: complete.value,
     screens: effectiveScreens.value,
-    sync: sync.value,
+    // What the taps were timed against (Stage Mode plays a sync made
+    // against another app silently, alongside the music).
+    sync: { ...sync.value, source: source.value },
     instrumentalOffset: instrumentalOffset.value,
   }
   const tempo =
     lineMode.value && saveTempo.value && sync.value.bpm
       ? Math.round(sync.value.bpm)
       : undefined
+  // One timing for both: the chord sheet's Line timing, from these taps.
+  const shared = shareTiming.value
+    ? lineTimingFromSync(parseBody(props.song.body ?? ""), payload.screens, {
+        bpm:
+          tempo ??
+          (Number(props.song.tempo) || Math.round(sync.value.bpm ?? 0) || 100),
+        source: source.value,
+      })
+    : null
   router.patch(
     songsPhrasings.update({ song_id: props.song.slug }).url,
-    { phrasing: JSON.stringify(payload), tempo },
+    {
+      phrasing: JSON.stringify(payload),
+      tempo,
+      line_timing: shared ? JSON.stringify(shared.value) : undefined,
+    },
     {
       preserveScroll: true,
       preserveState: true,
       onSuccess: () => {
         savedSnapshot.value = sent
         savedAt.value = new Date()
+        sharedNote.value = shared
+          ? `Line timing updated too (${shared.matched} of ${shared.total} lyric lines matched the chord sheet).`
+          : null
       },
       onError: (errors) => {
         // Say what the server objected to, not just that it did.
@@ -1035,13 +1294,71 @@ function formatTime(t: number | null | undefined): string {
       </div>
 
       <div class="bg-card rounded-xl border p-4">
-        <h2
-          class="text-muted-foreground mb-2 text-xs font-semibold tracking-wide uppercase"
-        >
-          Audio track
-        </h2>
+        <div class="mb-3 flex flex-wrap items-center gap-x-4 gap-y-2">
+          <h2
+            class="text-muted-foreground text-xs font-semibold tracking-wide uppercase"
+          >
+            Play the music from
+          </h2>
+          <div class="flex overflow-hidden rounded-md border" role="group">
+            <button
+              type="button"
+              class="grid-choice"
+              :class="{ 'is-on': !external }"
+              :aria-pressed="!external"
+              :disabled="!hasAudio"
+              :title="
+                hasAudio
+                  ? undefined
+                  : 'Upload the song\'s audio below to sync against it'
+              "
+              @click="source = 'audio'"
+            >
+              This song&rsquo;s audio
+            </button>
+            <button
+              type="button"
+              class="grid-choice"
+              :class="{ 'is-on': external }"
+              :aria-pressed="external"
+              @click="source = 'external'"
+            >
+              Another app or device
+            </button>
+          </div>
+        </div>
+        <div v-if="external" class="mb-3 rounded-lg border p-3 text-sm">
+          <p>
+            Play the song in any music app &mdash; Spotify, YouTube, Apple
+            Music, a CD &mdash; on this computer or another device. The page
+            keeps time with a stopwatch, from when the music starts:
+          </p>
+          <ol class="mt-1 list-decimal pl-5">
+            <li>
+              Press <kbd class="kbd">Enter</kbd>, then press
+              <kbd class="kbd">Space</kbd> the moment you start the music
+              &mdash; that starts the stopwatch.
+            </li>
+            <li>
+              Tap <kbd class="kbd">Space</kbd> as each
+              {{ lineMode ? "line" : "word" }} starts, as usual.
+            </li>
+            <li>
+              To redo a stretch (<kbd class="kbd">R</kbd>), play the music from
+              a little before the {{ lineMode ? "line" : "word" }}
+              <em>before</em> it and tap that one first &mdash; it lines the
+              stopwatch up with the music again.
+            </li>
+          </ol>
+          <p class="text-muted-foreground mt-1 text-xs">
+            The times match the music player&rsquo;s clock, so you can also type
+            them in from it in the Line taps list. In Stage Mode the song plays
+            silently: press &#9654; there as you start the music.
+          </p>
+        </div>
         <audio
           v-if="song.audio_url"
+          v-show="!external"
           ref="audioPlayer"
           :src="audioSrc"
           controls
@@ -1050,7 +1367,7 @@ function formatTime(t: number | null | undefined): string {
           @durationchange="onDurationChange"
         ></audio>
         <div
-          v-if="song.audio_url"
+          v-if="song.audio_url && !external"
           class="mt-2 flex flex-wrap items-center gap-2"
           role="group"
           aria-label="Listen to"
@@ -1117,8 +1434,10 @@ function formatTime(t: number | null | undefined): string {
           </span>
         </p>
         <p v-else class="text-muted-foreground mb-2 text-sm">
-          Upload the song&rsquo;s audio to start tapping out a sync. It&rsquo;s
-          saved with the song, so you only upload it once.
+          No audio uploaded &mdash; sync it against another app above, or upload
+          the song&rsquo;s audio to sync against that (and play it in Stage Mode
+          with Vocals). It&rsquo;s saved with the song, so you only upload it
+          once.
         </p>
         <div class="mt-3 flex flex-wrap items-center gap-2">
           <input
@@ -1339,7 +1658,7 @@ function formatTime(t: number | null | undefined): string {
             >
           </div>
           <div
-            class="aspect-video w-full overflow-hidden rounded-lg bg-black shadow-inner"
+            class="relative aspect-video w-full overflow-hidden rounded-lg bg-black shadow-inner"
           >
             <LyricStage
               :track="previewTrack"
@@ -1347,11 +1666,43 @@ function formatTime(t: number | null | undefined): string {
               :title="song.title"
               :artist="song.artist"
             />
+            <div
+              v-if="recording && waiting"
+              class="wait-note"
+              aria-live="polite"
+            >
+              <template v-if="anchorTime() == null">
+                <p class="font-bold">Start the music</p>
+                <p>
+                  and press <kbd class="kbd">Space</kbd> the moment it starts
+                </p>
+              </template>
+              <template v-else>
+                <p class="font-bold">Line up with the music</p>
+                <p>
+                  play it from a little before {{ anchorLabel }} and press
+                  <kbd class="kbd">Space</kbd> as it starts
+                </p>
+              </template>
+            </div>
           </div>
 
           <!-- where the song is -->
           <div
-            v-if="song.audio_url"
+            v-if="external"
+            class="text-muted-foreground mt-2 flex items-center gap-2 text-xs tabular-nums"
+          >
+            <span class="w-9 text-right">{{ clock(songTime) }}</span>
+            <span>{{
+              watchRunning
+                ? "stopwatch running"
+                : recording
+                  ? "stopwatch waiting for your first tap"
+                  : "stopwatch"
+            }}</span>
+          </div>
+          <div
+            v-else-if="song.audio_url"
             class="mt-2 flex items-center gap-2 text-xs tabular-nums"
           >
             <span class="text-muted-foreground w-9 text-right">{{
@@ -1374,7 +1725,7 @@ function formatTime(t: number | null | undefined): string {
           <div class="mt-3 flex flex-wrap items-center gap-2">
             <Button
               size="sm"
-              :disabled="!song.audio_url"
+              :disabled="!canPlay"
               :title="
                 recording ? 'Stop (Enter or Esc)' : 'Start tapping (Enter)'
               "
@@ -1387,7 +1738,7 @@ function formatTime(t: number | null | undefined): string {
               <Button
                 size="sm"
                 variant="outline"
-                :disabled="cuePointer === 0 || !song.audio_url"
+                :disabled="cuePointer === 0 || !canPlay"
                 title="Tap the last line again (R) -- press again to go back further"
                 @click="retapKey"
               >
@@ -1408,7 +1759,7 @@ function formatTime(t: number | null | undefined): string {
               <Button
                 size="sm"
                 variant="outline"
-                :disabled="tapPointer === 0 || !song.audio_url"
+                :disabled="tapPointer === 0 || !canPlay"
                 title="Tap the last word again (R)"
                 @click="retapKey"
               >
@@ -1434,7 +1785,7 @@ function formatTime(t: number | null | undefined): string {
             </template>
           </div>
 
-          <p v-if="recording && nextLabel" class="mt-2 text-sm">
+          <p v-if="recording && nextLabel && !waiting" class="mt-2 text-sm">
             Next: <span class="font-semibold">{{ nextLabel }}</span>
           </p>
 
@@ -1449,8 +1800,16 @@ function formatTime(t: number | null | undefined): string {
             @pointerleave="releaseLine"
             @pointercancel="releaseLine"
           >
-            <span class="text-lg font-bold">Tap: line starts</span>
-            <span class="text-xs opacity-80">{{ nextLabel }}</span>
+            <span class="text-lg font-bold">{{
+              waiting
+                ? anchorTime() == null
+                  ? "Tap: the music starts"
+                  : "Tap: line up with the music"
+                : "Tap: line starts"
+            }}</span>
+            <span class="text-xs opacity-80">{{
+              waiting ? anchorLabel : nextLabel
+            }}</span>
           </button>
 
           <!-- shortcuts -->
@@ -1522,11 +1881,30 @@ function formatTime(t: number | null | undefined): string {
             >
           </div>
           <p class="text-muted-foreground mb-2 text-xs">
+            Click a time to type it in &mdash; say, read off your music player
+            as the line starts (<code>1:23.45</code> or <code>83.45</code>).
             Click a line to pick it, then <kbd class="kbd">R</kbd> re-taps from
             there, <kbd class="kbd">P</kbd> plays it,
             <kbd class="kbd">[</kbd>&thinsp;<kbd class="kbd">]</kbd> nudge its
             tap.
           </p>
+          <label
+            class="text-muted-foreground mb-2 flex items-start gap-2 text-xs"
+          >
+            <input
+              v-model="shiftLater"
+              type="checkbox"
+              class="accent-primary mt-0.5"
+            />
+            <span>
+              <span class="text-foreground font-medium"
+                >Move the later lines too</span
+              >
+              when I change a time &mdash; e.g. to line up taps with the music
+              player&rsquo;s clock by fixing the first line; turn it off to fix
+              single lines.
+            </span>
+          </label>
           <ul ref="cueList" class="cue-list">
             <li
               v-for="(cue, i) in cues"
@@ -1540,9 +1918,38 @@ function formatTime(t: number | null | undefined): string {
               }"
               @click="selectCue(i)"
             >
-              <span class="w-20 shrink-0 text-xs tabular-nums">{{
-                formatTime(cue.time)
-              }}</span>
+              <span class="flex w-[5.25rem] shrink-0 flex-col">
+                <input
+                  type="text"
+                  inputmode="decimal"
+                  spellcheck="false"
+                  class="time-input"
+                  :class="{ 'is-bad': timeErrors[i] || outOfOrder(i) }"
+                  :value="timeText(i)"
+                  placeholder="not tapped"
+                  :aria-label="`Start time: ${cueText(cue)}`"
+                  :title="
+                    timeErrors[i] ??
+                    (outOfOrder(i)
+                      ? 'Not after the line above -- check this time'
+                      : 'When this line starts (m:ss.ss)')
+                  "
+                  @focus="onTimeFocus"
+                  @keydown="onTimeKeydown"
+                  @change="commitTime(i, $event)"
+                />
+                <span
+                  v-if="timeErrors[i]"
+                  class="text-destructive text-[0.65rem] leading-tight not-italic"
+                  role="alert"
+                  >{{ timeErrors[i] }}</span
+                >
+                <span
+                  v-else-if="outOfOrder(i)"
+                  class="text-[0.65rem] leading-tight text-amber-600 not-italic dark:text-amber-500"
+                  >before the line above</span
+                >
+              </span>
               <span class="min-w-0 flex-1 truncate text-sm">
                 {{ cueText(cue) }}
                 <span
@@ -1556,7 +1963,7 @@ function formatTime(t: number | null | undefined): string {
                 size="icon"
                 variant="ghost"
                 class="size-7"
-                :disabled="cue.time == null || !song.audio_url"
+                :disabled="cue.time == null || !canPlay"
                 :aria-label="`Play from: ${cueText(cue)}`"
                 @click="playFrom(i)"
                 ><Play class="size-3.5"
@@ -1583,7 +1990,7 @@ function formatTime(t: number | null | undefined): string {
                 size="sm"
                 variant="ghost"
                 class="h-7 px-2 text-xs"
-                :disabled="!song.audio_url"
+                :disabled="!canPlay"
                 @click="retapFrom(i)"
                 ><RotateCcw class="size-3.5" /> Re-tap</Button
               >
@@ -1598,9 +2005,30 @@ function formatTime(t: number | null | undefined): string {
               }"
               @click="selectCue(cues.length)"
             >
-              <span class="w-20 shrink-0 text-xs tabular-nums">{{
-                lastLine?.end != null ? formatTime(lastLine.end) : "optional"
-              }}</span>
+              <span class="flex w-[5.25rem] shrink-0 flex-col">
+                <input
+                  type="text"
+                  inputmode="decimal"
+                  spellcheck="false"
+                  class="time-input"
+                  :class="{
+                    'is-bad':
+                      timeErrors[cues.length] || outOfOrder(cues.length),
+                  }"
+                  :value="timeText(cues.length)"
+                  placeholder="optional"
+                  aria-label="End of the last line"
+                  @focus="onTimeFocus"
+                  @keydown="onTimeKeydown"
+                  @change="commitTime(cues.length, $event)"
+                />
+                <span
+                  v-if="timeErrors[cues.length]"
+                  class="text-destructive text-[0.65rem] leading-tight not-italic"
+                  role="alert"
+                  >{{ timeErrors[cues.length] }}</span
+                >
+              </span>
               <span class="min-w-0 flex-1 truncate text-sm">
                 End of the last line
                 <span
@@ -1614,7 +2042,7 @@ function formatTime(t: number | null | undefined): string {
                 size="sm"
                 variant="ghost"
                 class="h-7 px-2 text-xs"
-                :disabled="!song.audio_url"
+                :disabled="!canPlay"
                 @click="retapFrom(cues.length)"
                 ><RotateCcw class="size-3.5" />
                 {{ lastLine?.end != null ? "Re-tap" : "Tap it" }}</Button
@@ -1927,14 +2355,22 @@ function formatTime(t: number | null | undefined): string {
       </span>
       <span v-else-if="savedAt" class="text-muted-foreground text-xs">
         Saved {{ savedAt.toLocaleTimeString([], { timeStyle: "short" }) }}
+        <template v-if="sharedNote"> &middot; {{ sharedNote }}</template>
       </span>
+      <label
+        class="text-muted-foreground flex items-center gap-1.5 text-xs"
+        title="The karaoke sync and Line timing are one timing: saving here gives the chord sheet's lines these times too"
+      >
+        <input v-model="shareTiming" type="checkbox" class="accent-primary" />
+        Update Line timing too
+      </label>
       <template v-if="!complete">
         <span class="text-xs font-medium text-amber-600 dark:text-amber-500">
           {{ remainingText }} &mdash; Stage Mode plays the recording (with
           Vocals) once every {{ lineMode ? "line" : "word" }} is tapped.
         </span>
         <Button
-          v-if="song.audio_url && remaining > 0"
+          v-if="canPlay && remaining > 0"
           size="sm"
           variant="outline"
           @click="tapRest"
@@ -2047,6 +2483,44 @@ function formatTime(t: number | null | undefined): string {
 .cue-row.is-next {
   border-color: var(--primary);
   background: color-mix(in oklab, var(--primary) 8%, transparent);
+}
+.time-input {
+  width: 100%;
+  padding: 0.1rem 0.3rem;
+  border: 1px solid transparent;
+  border-radius: 0.3rem;
+  background: transparent;
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  font-style: normal;
+  color: var(--foreground);
+}
+.time-input:hover {
+  border-color: var(--border);
+}
+.time-input:focus {
+  border-color: var(--ring);
+  background: var(--background);
+  outline: none;
+}
+.time-input::placeholder {
+  color: var(--muted-foreground);
+}
+.time-input.is-bad {
+  border-color: rgb(217 119 6 / 0.7);
+}
+.wait-note {
+  position: absolute;
+  inset: auto 0.75rem 0.75rem 0.75rem;
+  padding: 0.6rem 0.9rem;
+  border-radius: 0.6rem;
+  background: rgb(0 0 0 / 0.85);
+  color: #fff;
+  text-align: center;
+  font-size: 0.9rem;
+}
+.wait-note .kbd {
+  color: var(--foreground);
 }
 .cue-row.is-break {
   font-style: italic;

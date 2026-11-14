@@ -87,6 +87,11 @@ export interface PhrasingSync {
   // How long a syllable is sung, in beats (0 = spread the words over the
   // whole line). Missing = the default, half a beat.
   pace?: number
+  // What the taps were timed against: the song's uploaded audio, or music
+  // playing in another app (a stopwatch, from when the music starts). An
+  // "external" sync plays silently in Stage Mode, alongside the music.
+  // Missing = the uploaded audio.
+  source?: "audio" | "external"
 }
 
 export interface Phrasing {

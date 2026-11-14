@@ -521,6 +521,13 @@ function go(id: string) {
         <!-- ------------------------------------------------------------ -->
         <section v-show="visible('line-timing')" id="line-timing">
           <h2>Line timing</h2>
+          <p class="note">
+            <strong>Tap once, for both.</strong> Line timing and the karaoke
+            sync are the same timing: saving either one updates the other, so
+            you only need to tap a song once. (A karaoke sync tapped word by
+            word is kept as it is.) Untick <strong>Update &hellip; too</strong>
+            next to the Save button to keep them separate.
+          </p>
           <p>
             Real songs don't give every line the same length. Line timing
             records when each line really starts, so Stage Mode's highlight and
@@ -660,6 +667,35 @@ function go(id: string) {
               <strong>Save sync</strong>). You can save a half-done sync and
               finish it later &mdash; <strong>Tap the rest</strong> taps only
               the lines still missing.
+            </li>
+          </ol>
+          <h3>Syncing with music from another app</h3>
+          <p>
+            No audio uploaded? Under <strong>Play the music from</strong>,
+            choose <strong>Another app or device</strong> and play the song in
+            Spotify, YouTube or any player:
+          </p>
+          <ol>
+            <li>
+              Press <kbd>Enter</kbd>, then <kbd>Space</kbd> the moment you start
+              the music &mdash; that starts the page's stopwatch.
+            </li>
+            <li>Tap <kbd>Space</kbd> as each line starts, as usual.</li>
+            <li>
+              To redo a stretch (<kbd>R</kbd>), play the music from a little
+              before the line <em>before</em> it and tap that line first &mdash;
+              it lines the stopwatch up again &mdash; then carry on.
+            </li>
+            <li>
+              Or click a time in the <strong>Line taps</strong> list and type
+              what your player shows as the line starts (<code>1:23.45</code>).
+              Tick <strong>Move the later lines too</strong> to shift every
+              later line with it.
+            </li>
+            <li>
+              In Stage Mode the song plays silently: press &#9654; Play as you
+              start the music. If the lyrics run early or late, use Settings
+              &rarr; <strong>Lyrics</strong> Earlier/Later while it plays.
             </li>
           </ol>
           <p>

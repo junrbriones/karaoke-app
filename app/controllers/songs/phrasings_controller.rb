@@ -6,6 +6,7 @@ module Songs
   # and lib/phrasing.ts for the client-side parsing/recording). Owner-only,
   # same as the rest of song editing.
   class PhrasingsController < InertiaController
+    include LineTimingParams
     before_action :set_sync_song
 
     def show
@@ -27,6 +28,13 @@ module Songs
         @song.phrasing = parsed
       end
 
+      # One timing for both: the editor sends the chord sheet's Line timing
+      # worked out from the sync's line taps too (lib/sharedTiming.ts).
+      if params[:line_timing].present?
+        timing = parse_line_timing(params[:line_timing])
+        @song.line_timing = timing unless timing == :invalid
+      end
+
       # A line-by-line sync finds the song's tempo from the taps; the editor
       # can send it along to become the song's tempo.
       @song.tempo = params[:tempo].to_i if params[:tempo].present? && params[:tempo].to_i.between?(20, 300)
@@ -44,6 +52,7 @@ module Songs
       if params[:instrumental].present? then "Minus-one track saved"
       elsif params[:remove_instrumental].present? then "Minus-one track removed"
       elsif params[:audio].present? then "Audio saved"
+      elsif params[:line_timing].present? then "Karaoke sync saved, and the line timing with it"
       else "Karaoke sync saved"
       end
     end

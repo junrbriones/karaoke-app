@@ -17,11 +17,15 @@ import { type SongBlock, chordGroups } from "@/lib/chordSheet"
 import type { Phrasing } from "@/lib/phrasing"
 import type { Timeline, TimelineLine, TimelineWord } from "@/lib/tempoGuide"
 
-interface SyncedLine {
+export interface SyncedLine {
   key: string
   start: number
   end: number
   words: { key: string; start: number; end: number }[]
+}
+
+export function normalizeLyrics(text: string): string {
+  return normalize(text)
 }
 
 function normalize(text: string): string {
@@ -35,7 +39,7 @@ function normalize(text: string): string {
 }
 
 // The sync's lyric lines with their times, in order.
-export function syncedLines(phrasing: Phrasing): SyncedLine[] {
+export function syncedLines(phrasing: Pick<Phrasing, "screens">): SyncedLine[] {
   const out: SyncedLine[] = []
   for (const screen of phrasing.screens) {
     for (const line of screen.lines) {
@@ -81,17 +85,19 @@ function spread(
   })
 }
 
-export function timelineFromSync(
-  blocks: SongBlock[],
-  phrasing: Phrasing,
-  fallbackBar = 2,
-): Timeline {
-  const synced = syncedLines(phrasing)
-  const lines: TimelineLine[] = blocks.map(() => null)
-  type Slot = { index: number; lyrics: string[]; match: SyncedLine | null }
-  const slots: Slot[] = []
+export interface SheetSlot {
+  index: number // block index
+  lyrics: string[]
+  match: SyncedLine | null
+}
 
-  // Match lyric lines in order, looking a few lines ahead for each.
+// The sheet's lines (lyric and chord-only), each with the sync line its
+// words match, in order -- looking a few lines ahead for each.
+export function matchSheetLines(
+  blocks: SongBlock[],
+  synced: SyncedLine[],
+): SheetSlot[] {
+  const slots: SheetSlot[] = []
   let j = 0
   blocks.forEach((block, index) => {
     if (block.type !== "pair") return
@@ -110,6 +116,17 @@ export function timelineFromSync(
     }
     slots.push({ index, lyrics, match })
   })
+  return slots
+}
+
+export function timelineFromSync(
+  blocks: SongBlock[],
+  phrasing: Pick<Phrasing, "screens">,
+  fallbackBar = 2,
+): Timeline {
+  const synced = syncedLines(phrasing)
+  const lines: TimelineLine[] = blocks.map(() => null)
+  const slots = matchSheetLines(blocks, synced)
 
   // Times for every slot: matched ones from the sync, the rest sharing the
   // gaps between them.
