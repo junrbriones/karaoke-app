@@ -4,12 +4,19 @@
 # can open (their own, and anything shared with a group they're in), run
 # straight through in Stage Mode. Every user has these; a group's setlists
 # (SetlistsController) are separate and run by the group's owner.
+#
+# A setlist can be shared with everyone signed in to the app (`share`);
+# they open it through SharedSetlistsController.
 class MySetlistsController < InertiaController
-  before_action :set_setlist, only: %i[show edit update destroy stage]
+  before_action :set_setlist, only: %i[show edit update destroy stage share]
 
   def index
     render inertia: "setlists/index", props: {
       setlists: Current.user.setlists.order(:name).map { |s| setlist_json(s) },
+      shared_setlists: Setlist.shared_with_everyone.where.not(user_id: Current.user.id)
+        .includes(:user).order(:name).map do |s|
+          { id: s.id, name: s.name, song_count: s.setlist_songs.count, owner_name: s.user.name }
+        end,
       starred_count: Current.user.songs.in_setlist.count
     }
   end
@@ -53,13 +60,22 @@ class MySetlistsController < InertiaController
     redirect_to my_setlists_path, notice: "Setlist deleted"
   end
 
-  # Runs the setlist's songs, in order, through Stage Mode.
+  # Runs the setlist's songs, in order, through Stage Mode -- from the
+  # first, or from `start` (a position among the playable songs).
   def stage
     render inertia: "songs/stage", props: {
       songs: playable_entries.map { |ss| ss.song.detail_json(Current.user) },
       single: false,
+      start_index: params[:start].to_i.clamp(0, 10_000),
       exit_href: my_setlist_path(@setlist)
     }
+  end
+
+  # Shares the setlist with everyone signed in to the app, or stops.
+  def share
+    shared = ActiveModel::Type::Boolean.new.cast(params[:shared]) == true
+    @setlist.update!(shared: shared)
+    redirect_to my_setlist_path(@setlist), notice: shared ? "Shared with everyone" : "No longer shared"
   end
 
   private
@@ -73,7 +89,10 @@ class MySetlistsController < InertiaController
   end
 
   def setlist_json(setlist)
-    { id: setlist.id, name: setlist.name, slug: setlist.slug, song_count: setlist.setlist_songs.count }
+    {
+      id: setlist.id, name: setlist.name, slug: setlist.slug,
+      song_count: setlist.setlist_songs.count, shared: setlist.shared
+    }
   end
 
   # A song stops being openable if it's unshared from (or they leave) the
@@ -95,8 +114,12 @@ class MySetlistsController < InertiaController
 
     setlist_json(@setlist).merge(
       is_owner: true,
+      shared_url: @setlist.shared? ? shared_setlist_url(id: @setlist.id) : nil,
       entries: entries.map do |ss|
-        { id: ss.id, position: ss.position, unavailable: !ok.include?(ss.song_id), song: ss.song.summary_json(Current.user) }
+        {
+          id: ss.id, position: ss.position, unavailable: !ok.include?(ss.song_id), openable: ok.include?(ss.song_id),
+          song: ss.song.summary_json(Current.user)
+        }
       end,
       available_songs: available.map { |s| s.summary_json(Current.user) }
     )

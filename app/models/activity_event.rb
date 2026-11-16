@@ -55,6 +55,9 @@ class ActivityEvent < ApplicationRecord
     "personal_setlist_song_added" => [ "songs", "Added a song to a setlist" ],
     "personal_setlist_song_removed" => [ "songs", "Removed a song from a setlist" ],
     "personal_setlist_stage_opened" => [ "songs", "Opened a setlist in Stage Mode" ],
+    "personal_setlist_shared" => [ "songs", "Shared a setlist with everyone" ],
+    "personal_setlist_unshared" => [ "songs", "Stopped sharing a setlist" ],
+    "shared_setlist_stage_opened" => [ "songs", "Opened someone's shared setlist in Stage Mode" ],
     "live_session_started" => [ "groups", "Started a live session" ],
     "live_session_ended" => [ "groups", "Ended a live session" ]
   }.freeze

@@ -47,6 +47,8 @@ module TracksActivity
     "my_setlists#update" => [ "personal_setlist_updated", :@setlist ],
     "my_setlists#destroy" => [ "personal_setlist_deleted", :@setlist ],
     "my_setlists#stage" => [ "personal_setlist_stage_opened", :@setlist ],
+    "my_setlists#share" => [ :setlist_share_activity, :@setlist ],
+    "shared_setlists#stage" => [ "shared_setlist_stage_opened", :@setlist ],
     "my_setlist_songs#create" => [ "personal_setlist_song_added", :@setlist ],
     "my_setlist_songs#destroy" => [ "personal_setlist_song_removed", :@setlist ],
     "live_sessions#create" => [ "live_session_started", :@group ],
@@ -90,6 +92,10 @@ module TracksActivity
       group: group.respond_to?(:name) ? group.name : nil,
       errors: errors.respond_to?(:to_h) ? errors.to_h.transform_values { |v| Array(v).first.to_s.truncate(120) } : nil
     }
+  end
+
+  def setlist_share_activity
+    ActiveModel::Type::Boolean.new.cast(params[:shared]) ? "personal_setlist_shared" : "personal_setlist_unshared"
   end
 
   def phrasing_activity

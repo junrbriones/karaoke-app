@@ -51,9 +51,18 @@ Rails.application.routes.draw do
 
   # Everyone's own setlists, for performing solo (a group's are under
   # /groups/:group_id/setlists).
+  # Setlists other people have shared with everyone (read-only), by id --
+  # before `my_setlists`, so "shared" isn't taken for a setlist's slug.
+  resources :shared_setlists, path: "setlists/shared", only: [ :show ] do
+    member do
+      get :stage
+    end
+  end
+
   resources :my_setlists, path: "setlists" do
     member do
       get :stage
+      patch :share
     end
     resources :entries, only: [ :create, :destroy ], controller: "my_setlist_songs" do
       member do

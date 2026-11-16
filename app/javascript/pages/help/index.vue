@@ -358,6 +358,20 @@ function go(id: string) {
               From a song's page, <strong>Add to setlist&hellip;</strong> adds
               it to one of your setlists (or starts a new one).
             </li>
+            <li>
+              <strong>Share a setlist with everyone</strong>: open it and click
+              <strong>Share with everyone</strong>. Everyone who uses JBKaraoke
+              then finds it under Setlists &rarr;
+              <strong>Shared with everyone</strong> and can play it in Stage
+              Mode (or send them the link with <strong>Copy link</strong>). Only
+              you can change it; <strong>Stop sharing</strong> makes it private
+              again. Your own songs in it play for everyone; songs you have from
+              your groups only play for people who can open them.
+            </li>
+            <li>
+              &#9654; next to a song in a setlist starts Stage Mode from that
+              song.
+            </li>
           </ul>
         </section>
 

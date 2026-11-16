@@ -55,4 +55,10 @@ export default {
     url: buildUrl('/setlists/:id/stage', params, options),
     method: 'get',
   }),
+
+  /** PATCH /setlists/:id/share */
+  share: (params: SetlistParam, options?: RouteOptions): RouteDefinition<'patch'> => ({
+    url: buildUrl('/setlists/:id/share', params, options),
+    method: 'patch',
+  }),
 }

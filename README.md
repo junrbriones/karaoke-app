@@ -362,6 +362,19 @@ from you, it stays listed, marked "no longer shared with you", and is
 skipped in Stage Mode. The &#9733; star (now labelled Star/Starred) is still
 the quick A-to-Z list, shown alongside your setlists.
 
+**Sharing a setlist with everyone.** On your setlist's page, **Share with
+everyone** makes it available to everyone signed in to the app: it's listed
+under **Setlists &rarr; Shared with everyone** (with your name), and opens
+read-only at `/setlists/shared/:id` (**Copy link** on your page gives the
+address) &mdash; they can run it in Stage Mode, from the top or from any song
+(&#9654;), but only you can rename, reorder, add, remove, delete or stop
+sharing it. Your own songs in it go with it, so they play for everyone
+(only through the setlist &mdash; their song pages stay yours). A song you
+have from one of your groups only plays for people who can open it anyway;
+for anyone else it's listed as "not shared with you" and skipped. Sharing
+and unsharing are in the activity log. (`setlists.shared`,
+`SharedSetlistsController`, `Setlist#playable_song_ids_for`.)
+
 ### Live Sync
 
 A song (or a whole setlist) can be played in sync across every group

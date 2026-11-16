@@ -1,12 +1,24 @@
 <script setup lang="ts">
 import { Head, Link } from "@inertiajs/vue3"
 
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import AppLayout from "@/layouts/AppLayout.vue"
-import { mySetlists, setlistStage } from "@/routes"
+import { mySetlists, setlistStage, sharedSetlists } from "@/routes"
 import type { BreadcrumbItem, Setlist } from "@/types"
 
-defineProps<{ setlists: Setlist[]; starred_count: number }>()
+interface SharedSetlist {
+  id: number
+  name: string
+  song_count: number
+  owner_name: string
+}
+
+defineProps<{
+  setlists: Setlist[]
+  shared_setlists?: SharedSetlist[]
+  starred_count: number
+}>()
 
 const breadcrumbs: BreadcrumbItem[] = [
   { title: "My setlists", href: mySetlists.index().url },
@@ -22,7 +34,8 @@ const breadcrumbs: BreadcrumbItem[] = [
         <p class="text-muted-foreground max-w-xl text-sm">
           Your own setlists, for performing solo: a named, ordered run of any
           songs you can open &mdash; yours, and the ones shared with your groups
-          &mdash; played straight through in Stage Mode.
+          &mdash; played straight through in Stage Mode. Share one from its page
+          and everyone who uses JBKaraoke can play it too.
         </p>
         <Link :href="mySetlists.new()">
           <Button>+ New setlist</Button>
@@ -36,7 +49,10 @@ const breadcrumbs: BreadcrumbItem[] = [
           :href="mySetlists.show({ id: setlist.slug })"
           class="bg-card hover:border-primary/50 flex flex-col gap-1 rounded-xl border p-4 shadow-sm transition-colors"
         >
-          <h3 class="font-semibold">{{ setlist.name }}</h3>
+          <h3 class="flex items-center justify-between gap-2 font-semibold">
+            {{ setlist.name }}
+            <Badge v-if="setlist.shared" variant="secondary">Shared</Badge>
+          </h3>
           <p class="text-muted-foreground text-sm">
             {{ setlist.song_count }} song{{
               setlist.song_count === 1 ? "" : "s"
@@ -62,6 +78,30 @@ const breadcrumbs: BreadcrumbItem[] = [
         No setlists yet &mdash; create one for your next gig or practice, or add
         a song to a new setlist from its page.
       </p>
+
+      <template v-if="shared_setlists?.length">
+        <h2
+          class="text-muted-foreground mt-2 text-xs font-semibold tracking-wide uppercase"
+        >
+          Shared with everyone
+        </h2>
+        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <Link
+            v-for="setlist in shared_setlists"
+            :key="setlist.id"
+            :href="sharedSetlists.show({ id: setlist.id })"
+            class="bg-card hover:border-primary/50 flex flex-col gap-1 rounded-xl border p-4 shadow-sm transition-colors"
+          >
+            <h3 class="font-semibold">{{ setlist.name }}</h3>
+            <p class="text-muted-foreground text-sm">
+              {{ setlist.song_count }} song{{
+                setlist.song_count === 1 ? "" : "s"
+              }}
+              &middot; by {{ setlist.owner_name }}
+            </p>
+          </Link>
+        </div>
+      </template>
     </div>
   </AppLayout>
 </template>

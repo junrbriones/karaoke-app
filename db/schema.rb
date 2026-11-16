@@ -10,26 +10,26 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_10_000016) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_16_000017) do
   create_table "active_storage_attachments", force: :cascade do |t|
+    t.string "name", null: false
+    t.string "record_type", null: false
+    t.bigint "record_id", null: false
     t.bigint "blob_id", null: false
     t.datetime "created_at", null: false
-    t.string "name", null: false
-    t.bigint "record_id", null: false
-    t.string "record_type", null: false
     t.index ["blob_id"], name: "index_active_storage_attachments_on_blob_id"
     t.index ["record_type", "record_id", "name", "blob_id"], name: "index_active_storage_attachments_uniqueness", unique: true
   end
 
   create_table "active_storage_blobs", force: :cascade do |t|
-    t.bigint "byte_size", null: false
-    t.string "checksum"
-    t.string "content_type"
-    t.datetime "created_at", null: false
-    t.string "filename", null: false
     t.string "key", null: false
+    t.string "filename", null: false
+    t.string "content_type"
     t.text "metadata"
     t.string "service_name", null: false
+    t.bigint "byte_size", null: false
+    t.string "checksum"
+    t.datetime "created_at", null: false
     t.index ["key"], name: "index_active_storage_blobs_on_key", unique: true
   end
 
@@ -40,18 +40,18 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_10_000016) do
   end
 
   create_table "activity_events", force: :cascade do |t|
-    t.string "action", null: false
+    t.integer "user_id"
     t.string "actor_label"
+    t.string "action", null: false
     t.string "category", null: false
-    t.datetime "created_at", null: false
-    t.json "details"
-    t.string "ip_address"
     t.string "outcome", default: "ok", null: false
+    t.string "subject_type"
     t.bigint "subject_id"
     t.string "subject_label"
-    t.string "subject_type"
+    t.json "details"
+    t.string "ip_address"
     t.string "user_agent"
-    t.integer "user_id"
+    t.datetime "created_at", null: false
     t.index ["category", "created_at"], name: "index_activity_events_on_category_and_created_at"
     t.index ["created_at"], name: "index_activity_events_on_created_at"
     t.index ["user_id", "created_at"], name: "index_activity_events_on_user_id_and_created_at"
@@ -59,38 +59,38 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_10_000016) do
   end
 
   create_table "groups", force: :cascade do |t|
-    t.datetime "created_at", null: false
     t.string "name", null: false
     t.string "slug", null: false
+    t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.index ["slug"], name: "index_groups_on_slug", unique: true
   end
 
   create_table "live_sessions", force: :cascade do |t|
-    t.integer "beats_per_line", default: 4, null: false
-    t.integer "bpm", default: 100, null: false
-    t.float "clock_offset", default: 0.0, null: false
-    t.datetime "clock_started_at"
-    t.integer "count_in_beats", default: 4, null: false
-    t.datetime "created_at", null: false
-    t.integer "current_index", default: 0, null: false
-    t.datetime "ended_at"
     t.integer "group_id", null: false
     t.integer "leader_id", null: false
-    t.boolean "playing", default: false, null: false
     t.json "song_ids", null: false
+    t.integer "current_index", default: 0, null: false
+    t.boolean "playing", default: false, null: false
+    t.datetime "clock_started_at"
+    t.float "clock_offset", default: 0.0, null: false
+    t.integer "bpm", default: 100, null: false
+    t.integer "beats_per_line", default: 4, null: false
+    t.datetime "ended_at"
+    t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.integer "count_in_beats", default: 4, null: false
     t.index ["group_id", "ended_at"], name: "index_live_sessions_on_group_id_and_ended_at"
     t.index ["group_id"], name: "index_live_sessions_on_group_id"
     t.index ["leader_id"], name: "index_live_sessions_on_leader_id"
   end
 
   create_table "memberships", force: :cascade do |t|
-    t.datetime "created_at", null: false
+    t.integer "user_id", null: false
     t.integer "group_id", null: false
     t.string "role", default: "member", null: false
+    t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
-    t.integer "user_id", null: false
     t.index ["group_id"], name: "index_memberships_on_group_id"
     t.index ["user_id", "group_id"], name: "index_memberships_on_user_id_and_group_id", unique: true
     t.index ["user_id"], name: "index_memberships_on_user_id"
@@ -106,10 +106,10 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_10_000016) do
   end
 
   create_table "setlist_songs", force: :cascade do |t|
-    t.datetime "created_at", null: false
-    t.integer "position", default: 0, null: false
     t.integer "setlist_id", null: false
     t.integer "song_id", null: false
+    t.integer "position", default: 0, null: false
+    t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.index ["setlist_id", "position"], name: "index_setlist_songs_on_setlist_id_and_position"
     t.index ["setlist_id", "song_id"], name: "index_setlist_songs_on_setlist_id_and_song_id", unique: true
@@ -118,22 +118,24 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_10_000016) do
   end
 
   create_table "setlists", force: :cascade do |t|
-    t.datetime "created_at", null: false
     t.integer "group_id"
     t.string "name", null: false
     t.string "slug", null: false
+    t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.integer "user_id"
+    t.boolean "shared", default: false, null: false
     t.index ["group_id", "slug"], name: "index_setlists_on_group_id_and_slug", unique: true
     t.index ["group_id"], name: "index_setlists_on_group_id"
+    t.index ["shared"], name: "index_setlists_on_shared"
     t.index ["user_id", "slug"], name: "index_setlists_on_user_id_and_slug", unique: true
     t.index ["user_id"], name: "index_setlists_on_user_id"
   end
 
   create_table "song_shares", force: :cascade do |t|
-    t.datetime "created_at", null: false
-    t.integer "group_id", null: false
     t.integer "song_id", null: false
+    t.integer "group_id", null: false
+    t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.index ["group_id"], name: "index_song_shares_on_group_id"
     t.index ["song_id", "group_id"], name: "index_song_shares_on_song_id_and_group_id", unique: true
@@ -141,33 +143,33 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_10_000016) do
   end
 
   create_table "songs", force: :cascade do |t|
+    t.integer "user_id", null: false
+    t.string "title", null: false
     t.string "artist"
-    t.text "body", default: "", null: false
-    t.string "capo"
-    t.datetime "created_at", null: false
-    t.boolean "in_setlist", default: false, null: false
     t.string "key"
+    t.string "capo"
+    t.integer "tempo"
+    t.text "body", default: "", null: false
+    t.string "slug", null: false
+    t.boolean "in_setlist", default: false, null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.json "phrasing"
     t.json "line_timing"
     t.boolean "members_edit_sync", default: false, null: false
-    t.json "phrasing"
-    t.string "slug", null: false
-    t.integer "tempo"
-    t.string "title", null: false
-    t.datetime "updated_at", null: false
-    t.integer "user_id", null: false
     t.index ["user_id", "slug"], name: "index_songs_on_user_id_and_slug", unique: true
     t.index ["user_id"], name: "index_songs_on_user_id"
   end
 
   create_table "users", force: :cascade do |t|
-    t.boolean "admin", default: false, null: false
     t.datetime "created_at", null: false
     t.string "email", null: false
-    t.boolean "must_change_password", default: false, null: false
     t.string "name", null: false
     t.string "password_digest", null: false
     t.datetime "updated_at", null: false
     t.boolean "verified", default: false, null: false
+    t.boolean "admin", default: false, null: false
+    t.boolean "must_change_password", default: false, null: false
     t.index ["email"], name: "index_users_on_email", unique: true
   end
 

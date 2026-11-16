@@ -2,6 +2,11 @@
 # owner, drawn from the songs shared with the group, run by every member)
 # or one user's own -- a solo performer's -- drawn from any song they can
 # open: their own and anything shared with a group they're in.
+#
+# A personal setlist can be shared with everyone signed in to the app
+# (`shared`): they can open it and run it in Stage Mode, read-only. Its
+# owner's own songs come with it; a song the owner has from one of their
+# groups only plays for people who can open it anyway.
 class Setlist < ApplicationRecord
   belongs_to :group, optional: true
   belongs_to :user, optional: true
@@ -12,8 +17,10 @@ class Setlist < ApplicationRecord
   validates :name, presence: true
   validates :slug, presence: true, uniqueness: { scope: %i[group_id user_id] }
   validate :belongs_to_a_group_or_a_user
+  validate :only_personal_setlists_are_shared
 
   scope :personal, -> { where(group_id: nil) }
+  scope :shared_with_everyone, -> { personal.where(shared: true) }
 
   before_validation :generate_slug, if: -> { slug.blank? || name_changed? }
 
@@ -34,6 +41,23 @@ class Setlist < ApplicationRecord
   # personal one, every song its owner can open.
   def song_pool
     personal? ? Song.accessible_to(user) : group.songs
+  end
+
+  # Whether `viewer` can open this (personal) setlist: its owner, or anyone
+  # once it's shared.
+  def viewable_by?(viewer)
+    personal? && viewer.present? && (user_id == viewer.id || shared?)
+  end
+
+  # Which of these songs `viewer` can play from this setlist: the ones it
+  # can still draw from that are its owner's own (shared along with it),
+  # or that the viewer can open anyway.
+  def playable_song_ids_for(viewer, song_ids)
+    pool = song_pool.where(id: song_ids)
+    return pool.pluck(:id).to_set if viewer.id == user_id
+
+    pool.where("songs.user_id = :owner OR songs.id IN (:visible)",
+      owner: user_id, visible: Song.accessible_to(viewer).select(:id)).pluck(:id).to_set
   end
 
   def can_include?(song)
@@ -73,6 +97,10 @@ class Setlist < ApplicationRecord
 
   def belongs_to_a_group_or_a_user
     errors.add(:base, "A setlist belongs to a group or to one person") unless group_id.present? ^ user_id.present?
+  end
+
+  def only_personal_setlists_are_shared
+    errors.add(:shared, "is only for your own setlists") if shared? && !personal?
   end
 
   def generate_slug

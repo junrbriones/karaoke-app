@@ -119,8 +119,11 @@ export interface SetlistEntry {
   id: number
   position: number
   song: Song
-  // A personal setlist's song that's no longer shared with its owner.
+  // A personal setlist's song that's no longer shared with its owner (or,
+  // in someone else's shared setlist, one you can't play).
   unavailable?: boolean
+  // Whether you can open the song's own page.
+  openable?: boolean
 }
 
 export interface Setlist {
@@ -128,6 +131,10 @@ export interface Setlist {
   name: string
   slug: string
   song_count: number
+  // A personal setlist shared with everyone signed in to the app.
+  shared?: boolean
+  shared_url?: string | null
+  owner_name?: string
   is_owner?: boolean
   entries?: SetlistEntry[]
   available_songs?: Song[]

@@ -54,10 +54,17 @@ const props = defineProps<{
   songs: Song[]
   single: boolean
   exit_href?: string
+  // Start at this song (a setlist's "play from here").
+  start_index?: number
 }>()
 
 /* ---- which song ---- */
-const currentIndex = ref(0)
+const currentIndex = ref(
+  Math.min(
+    Math.max(0, props.start_index ?? 0),
+    Math.max(0, props.songs.length - 1),
+  ),
+)
 const currentSong = computed<Song | undefined>(
   () => props.songs[currentIndex.value],
 )
