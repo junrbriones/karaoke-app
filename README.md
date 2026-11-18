@@ -528,6 +528,19 @@ slower/faster (the tempo, or the free scroll speed),
 `-`/`+` text size, `K` or `V` karaoke/sheet view, `C` chords, `M` vocals
 on/guide/off (audio-synced songs), `S` scroll on/off (sheet view), `F` full screen, `Esc` hide the controls.
 
+**Foot pedal / page turner.** Settings &rarr; **Foot pedal** (remembered
+per device) lets a Bluetooth page-turner pedal turn the chord sheet's pages
+in the sheet view, wherever the focus is: its forward key (`↓`, `→` or
+`Page Down`) turns to the next page, its back key (`↑`, `←` or `Page Up`)
+to the one before. **Pedal turns** sets how far: **A page** (the first line
+that wasn't wholly in view comes to the top, so nothing is skipped or cut
+in half) or **Half a page**. Turning a page stops the sheet following the
+song (the ball or song-paced Scroll would pull it straight back); free
+Scroll carries on from the new page. While it's on, those keys don't move
+round the dock's buttons or change songs in the sheet view (`N` and the
+Prev/Next buttons still do) &mdash; turn it off for a TV remote. The karaoke
+view isn't affected.
+
 **Key change.** For a tempo-guide song, Key -/+ transposes the chords (and
 shows the new key, e.g. "A (+2)"). For a song with an audio sync, it
 pitch-shifts the backing track itself, up to 6 semitones either way,

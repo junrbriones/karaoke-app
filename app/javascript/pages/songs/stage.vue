@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Head, router } from "@inertiajs/vue3"
-import { useFullscreen, useLocalStorage } from "@vueuse/core"
+import { useEventListener, useFullscreen, useLocalStorage } from "@vueuse/core"
 import {
   Guitar,
   ListMusic,
@@ -592,6 +592,46 @@ function toggleView() {
    line on the reading line, live in SheetView) ---- */
 const sheetView = ref<InstanceType<typeof SheetView> | null>(null)
 const scrolling = ref(false)
+
+/* ---- foot pedal / page turner: turns the chord sheet's pages ----
+   Pedals send arrow keys or Page Up/Down. With this on, in the sheet view
+   those turn the page instead of moving round the dock's buttons (or
+   changing songs), so it doesn't matter where the focus is. It runs before
+   the remote navigation (TvShell), which then leaves the key alone. */
+const pedal = useLocalStorage("chordstage:pedal", false, persist)
+const pedalStep = useLocalStorage<"page" | "half">(
+  "chordstage:pedal-step",
+  "page",
+  persist,
+)
+const PEDAL_FORWARD = ["ArrowDown", "ArrowRight", "PageDown"]
+const PEDAL_BACK = ["ArrowUp", "ArrowLeft", "PageUp"]
+const pedalActive = computed(
+  () => pedal.value && view.value === "sheet" && !settingsOpen.value,
+)
+function onPedalKey(e: KeyboardEvent) {
+  if (!pedalActive.value || e.defaultPrevented) return
+  if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return
+  if (isTypingTarget(e)) return
+  const dir = PEDAL_FORWARD.includes(e.key)
+    ? 1
+    : PEDAL_BACK.includes(e.key)
+      ? -1
+      : 0
+  if (!dir) return
+  e.preventDefault()
+  // A sheet following the song's pace (or the ball) would pull straight
+  // back to the current line: the pedal takes over. Free scrolling just
+  // carries on from the new page.
+  if (tempoPlaying.value) stopTempo()
+  sheetView.value?.turnPage(dir, pedalStep.value === "half" ? 0.5 : 1)
+}
+useEventListener(
+  typeof window === "undefined" ? undefined : window,
+  "keydown",
+  onPedalKey,
+  { capture: true },
+)
 // A tempo-guide song's sheet scrolls at the song's pace: the tempo clock
 // runs and the sheet glides one line to the next over exactly as long as
 // each line lasts, with the current line marked but no ball (a clean
@@ -671,6 +711,7 @@ const statusText = computed(() => {
   if (props.songs.length > 1) {
     parts.push(`Song ${currentIndex.value + 1} of ${props.songs.length}`)
   }
+  if (pedal.value && view.value === "sheet") parts.push("foot pedal")
   if (silentSync.value) {
     parts.push(
       syncBpm.value
@@ -1164,6 +1205,39 @@ onBeforeUnmount(() => {
           @dec="nudgeScroll(-1)"
           @inc="nudgeScroll(1)"
         />
+        <TvButton
+          label="Foot pedal"
+          title="A foot pedal or page turner (arrow keys or Page Up/Down) turns the chord sheet's pages"
+          toggle
+          :active="pedal"
+          @click="pedal = !pedal"
+        />
+        <template v-if="pedal">
+          <div class="settings-row" role="group" aria-label="Pedal turns">
+            <span class="settings-label">Pedal turns</span>
+            <TvButton
+              label="Half a page"
+              toggle
+              :active="pedalStep === 'half'"
+              @click="pedalStep = 'half'"
+            />
+            <TvButton
+              label="A page"
+              toggle
+              :active="pedalStep === 'page'"
+              @click="pedalStep = 'page'"
+            />
+          </div>
+          <p class="settings-note">
+            In the sheet view, the pedal&rsquo;s forward key (&darr;, &rarr; or
+            Page Down) turns to the next page and its back key (&uarr;, &larr;
+            or Page Up) to the one before, wherever the focus is. Turning a page
+            stops the sheet following the song; free Scroll carries on from
+            there. While this is on, those keys don&rsquo;t move round the
+            buttons or change songs in the sheet view (N and the Prev/Next
+            buttons still do) &mdash; turn it off for a TV remote.
+          </p>
+        </template>
         <TvButton
           v-if="fullscreen.isSupported.value"
           :icon="fullscreen.isFullscreen.value ? Minimize : Maximize"

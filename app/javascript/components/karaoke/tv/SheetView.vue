@@ -206,6 +206,40 @@ onBeforeUnmount(() => {
   if (raf != null) cancelAnimationFrame(raf)
 })
 
+// A foot pedal's page turn: on by a screen (or `fraction` of one), so the
+// first line that wasn't wholly in view comes to the top -- nothing is
+// skipped and no line is left cut in half. Back works the same way: the
+// lines just above come into view, ending where the page began. Quick
+// presses add up.
+function turnPage(dir: 1 | -1, fraction = 1) {
+  const s = scroller.value
+  if (!s) return
+  measure()
+  const h = s.clientHeight
+  const max = Math.max(0, s.scrollHeight - h)
+  const now = followTarget ?? s.scrollTop
+  let target: number
+  if (dir > 0) {
+    const edge = now + h * fraction
+    const next = lines.find((l) => l.bottom > edge + 1 && l.top > now + 1)
+    target = next ? next.top : edge
+  } else {
+    const edge = now - h * fraction
+    const first = lines.find((l) => l.top >= edge - 1)
+    target = first && first.top < now - 1 ? first.top : edge
+  }
+  target = Math.max(0, Math.min(max, target))
+  if (props.autoScroll) {
+    // Free scrolling carries on from the new place.
+    pos = target
+    s.scrollTop = target
+    scrollMarked.value = lineAt(target + readingOffset() + 1)
+    return
+  }
+  followTarget = target
+  run()
+}
+
 // Back to the first line (song change, restart).
 function toTop() {
   followTarget = null
@@ -213,7 +247,7 @@ function toTop() {
   scrollMarked.value = -1
   if (scroller.value) scroller.value.scrollTop = 0
 }
-defineExpose({ toTop })
+defineExpose({ toTop, turnPage })
 </script>
 
 <template>

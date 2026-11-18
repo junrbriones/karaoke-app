@@ -526,6 +526,18 @@ function go(id: string) {
               </tr>
             </tbody>
           </table>
+          <h3>Foot pedal (page turner)</h3>
+          <p>
+            Using a Bluetooth foot pedal to turn pages? Open Stage Mode's
+            <strong>Settings</strong> and turn on <strong>Foot pedal</strong>.
+            In the sheet view the pedal then turns the chord sheet's pages
+            &mdash; forward with <kbd>&darr;</kbd>, <kbd>&rarr;</kbd> or
+            <kbd>Page Down</kbd>, back with <kbd>&uarr;</kbd>,
+            <kbd>&larr;</kbd> or <kbd>Page Up</kbd> &mdash; no matter which
+            button has the focus. <strong>Pedal turns</strong> chooses a whole
+            page or half a page. Turn it off again to use a TV remote's arrows
+            on the buttons.
+          </p>
           <p class="note">
             Changing the key of a recording needs the app to be opened over
             <code>https</code> (or on the computer it runs on).
