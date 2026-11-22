@@ -331,6 +331,19 @@ function go(id: string) {
               means play it open.
             </li>
             <li>
+              <strong>Pentatonic scales</strong>: type
+              <Link
+                :href="chords.index({ query: { q: 'A minor pentatonic' } })"
+                class="link"
+                >A minor pentatonic</Link
+              >, <code>C major pentatonic</code> or <code>E blues</code>, or
+              pick one under <strong>Scales on &hellip;</strong>. You get the
+              notes, the whole neck and the five box positions to learn one at a
+              time &mdash; drawn sideways like tab, high e on top, with the root
+              in orange. Switch the dots between note names and scale degrees. A
+              chord's chart suggests the scale to solo over it.
+            </li>
+            <li>
               The note buttons and the grid below let you browse every chord on
               a note. The address follows your search, so you can bookmark a
               chord or send it to someone.

@@ -216,6 +216,19 @@ notes from music theory and searches the fretboard (standard tuning) for
 playable shapes, scoring them so the familiar open chords and E-/A-shape
 barre chords come first -- so every chart is right for any root.
 
+**Pentatonic scales.** The same page looks up scales: type `A minor
+pentatonic`, `Am pent`, `C major pentatonic`, `E blues` (or just
+`pentatonic` / `blues` for the note being browsed), or pick one under
+**Scales on &hellip;** below the note buttons. Each shows its notes (root in
+orange), formula (`1 b3 4 5 b7`), the major/minor pentatonic with the same
+notes (A minor = C major pentatonic), the **whole neck** (open strings to
+fret 15) and the **five positions** &mdash; the classic boxes, two notes on
+every string, position 1 starting on the root on the low E string (the
+blues scale adds its blue note, `b5`, in blue). The dots can show note names
+or scale degrees. Diagrams are drawn sideways, high e on top, as tab reads.
+A chord's chart also suggests the pentatonic to solo over it. Like the
+chords, it's all worked out from theory (`lib/guitarScales.ts`).
+
 Each song's page also has a **Chord charts** panel (collapsible) with a
 chart for every chord the song uses, in the order they first come up, and
 in the key it's being shown in -- transpose the song and the charts follow.

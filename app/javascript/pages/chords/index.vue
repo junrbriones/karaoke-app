@@ -4,6 +4,7 @@ import { Search, X } from "lucide-vue-next"
 import { computed, ref, watch } from "vue"
 
 import ChordDiagram from "@/components/karaoke/ChordDiagram.vue"
+import ScaleDetail from "@/components/karaoke/ScaleDetail.vue"
 import { Input } from "@/components/ui/input"
 import AppLayout from "@/layouts/AppLayout.vue"
 import {
@@ -21,6 +22,14 @@ import {
   typesMatching,
   voicingsFor,
 } from "@/lib/guitarChords"
+import {
+  type ParsedScale,
+  SCALE_TYPES,
+  type ScaleId,
+  parseScale,
+  scaleForChord,
+  scaleOf,
+} from "@/lib/guitarScales"
 import { chords as chordsRoutes } from "@/routes"
 import type { BreadcrumbItem } from "@/types"
 
@@ -31,6 +40,7 @@ const breadcrumbs: BreadcrumbItem[] = [
 ]
 
 const EXAMPLES = ["C#m7", "Bbmaj7", "G/B", "Dsus4", "F#7b9", "Am7b5"]
+const SCALE_EXAMPLES = ["A minor pentatonic", "G major pentatonic", "E blues"]
 // The spelling guitar charts usually use for each key.
 const COMMON_ROOTS = [
   "C",
@@ -55,14 +65,45 @@ const query = ref(props.query)
 const browseRoot = ref("C")
 const browseType = ref<ChordType>(CHORD_TYPES[0])
 
-const chord = computed(() => parseChord(query.value))
+// A scale ("A minor pentatonic", "E blues"), or just the word
+// ("pentatonic", "blues") for the one on the note being browsed.
+const SCALE_WORD = /^(minor |major )?(pent(atonic)?|blues|scales?)$/i
+const scale = computed<ParsedScale | null>(() => {
+  const parsed = parseScale(query.value)
+  if (parsed) return parsed
+  const m = query.value.trim().match(SCALE_WORD)
+  if (!m) return null
+  const id: ScaleId = /blues/i.test(m[2])
+    ? "blues"
+    : /major/i.test(m[1] ?? "")
+      ? "major-pentatonic"
+      : "minor-pentatonic"
+  return scaleOf(browseRoot.value, id)
+})
+const chord = computed(() => (scale.value ? null : parseChord(query.value)))
+watch(
+  scale,
+  (sc) => {
+    if (sc) browseRoot.value = sc.root
+  },
+  { immediate: true },
+)
+const chordScale = computed(() =>
+  chord.value ? scaleForChord(chord.value) : null,
+)
+const rootScales = computed(() =>
+  SCALE_TYPES.map((t) => scaleOf(browseRoot.value, t.id)),
+)
 // "minor seventh", "dim": the search names a kind of chord, not a chord.
 const matchingTypes = computed(() =>
-  chord.value ? [] : typesMatching(query.value),
+  chord.value || scale.value ? [] : typesMatching(query.value),
 )
 const notFound = computed(
   () =>
-    query.value.trim() !== "" && !chord.value && !matchingTypes.value.length,
+    query.value.trim() !== "" &&
+    !chord.value &&
+    !scale.value &&
+    !matchingTypes.value.length,
 )
 
 // Remember the last chord looked up, so the browse grid and root picker
@@ -106,6 +147,10 @@ function look(name: string) {
 }
 
 function pickRoot(root: string) {
+  if (scale.value) {
+    look(`${root} ${scale.value.type.name}`)
+    return
+  }
   if (!chord.value) {
     // Browsing a kind of chord ("minor seventh"): just move the grid.
     browseRoot.value = root
@@ -143,8 +188,8 @@ const browseRootPc = computed(() => parseChord(browseRoot.value)?.rootPc ?? 0)
             autofocus
             autocomplete="off"
             spellcheck="false"
-            aria-label="Look up a chord"
-            placeholder="Look up a chord: C#m7, Bbmaj7, G/B…"
+            aria-label="Look up a chord or scale"
+            placeholder="Look up a chord or scale: C#m7, A minor pentatonic…"
             class="h-11 pl-9 text-base"
           />
           <button
@@ -174,6 +219,16 @@ const browseRootPc = computed(() => parseChord(browseRoot.value)?.rootPc ?? 0)
             >
               {{ ex }}</button
             >{{ i < EXAMPLES.length - 1 ? ", " : "." }}
+          </template>
+          Scales:
+          <template v-for="(ex, i) in SCALE_EXAMPLES" :key="ex">
+            <button
+              type="button"
+              class="text-foreground font-medium underline-offset-2 hover:underline"
+              @click="look(ex)"
+            >
+              {{ ex }}</button
+            >{{ i < SCALE_EXAMPLES.length - 1 ? ", " : "." }}
           </template>
         </p>
       </div>
@@ -257,6 +312,18 @@ const browseRootPc = computed(() => parseChord(browseRoot.value)?.rootPc ?? 0)
           There's no comfortable way to play this chord in standard tuning.
         </p>
 
+        <p v-if="chordScale" class="text-sm">
+          To solo or fill over it, try the
+          <button
+            type="button"
+            class="font-medium underline underline-offset-2"
+            @click="look(chordScale.name)"
+          >
+            {{ chordScale.name }}
+          </button>
+          scale.
+        </p>
+
         <p class="text-muted-foreground text-xs">
           Low E string on the left. A number on a dot is the finger to use (1
           index, 2 middle, 3 ring, 4 little); a bar is one finger pressing
@@ -266,6 +333,9 @@ const browseRootPc = computed(() => parseChord(browseRoot.value)?.rootPc ?? 0)
         </p>
       </section>
 
+      <!-- the scale looked up -->
+      <ScaleDetail v-else-if="scale" :scale="scale" @look="look" />
+
       <p v-else-if="notFound" class="text-muted-foreground" aria-live="polite">
         There's no chord called &ldquo;<span class="text-foreground">{{
           query
@@ -273,7 +343,8 @@ const browseRootPc = computed(() => parseChord(browseRoot.value)?.rootPc ?? 0)
         >&rdquo;. Start with the note (A to G), then a sharp (#) or flat (b),
         then the kind of chord: <span class="font-mono">C#m7</span>,
         <span class="font-mono">Bbmaj7</span>,
-        <span class="font-mono">Dsus4</span>.
+        <span class="font-mono">Dsus4</span> &mdash; or a scale:
+        <span class="font-mono">A minor pentatonic</span>.
       </p>
 
       <!-- browse -->
@@ -293,6 +364,23 @@ const browseRootPc = computed(() => parseChord(browseRoot.value)?.rootPc ?? 0)
             @click="pickRoot(root)"
           >
             {{ rootLabel(pc) }}
+          </button>
+        </div>
+        <div class="flex flex-wrap items-center gap-2 text-sm">
+          <span class="text-muted-foreground">Scales on {{ browseRoot }}:</span>
+          <button
+            v-for="sc in rootScales"
+            :key="sc.name"
+            type="button"
+            class="rounded-full border px-3 py-1 transition-colors"
+            :class="
+              scale && scale.name === sc.name
+                ? 'bg-primary text-primary-foreground border-primary'
+                : 'hover:bg-muted'
+            "
+            @click="look(sc.name)"
+          >
+            {{ sc.type.name }}
           </button>
         </div>
         <h2 class="text-lg font-semibold">
