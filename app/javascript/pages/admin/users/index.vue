@@ -1,12 +1,17 @@
 <script setup lang="ts">
-import { Head, Link } from "@inertiajs/vue3"
+import { Head, Link, router } from "@inertiajs/vue3"
 
 import AdminNav from "@/components/admin/AdminNav.vue"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import AppLayout from "@/layouts/AppLayout.vue"
 import { timeAgo } from "@/lib/userAgent"
-import { adminActivity, adminUserPasswords, adminUsers } from "@/routes"
+import {
+  adminActivity,
+  adminUserPasswords,
+  adminUserRoles,
+  adminUsers,
+} from "@/routes"
 import type { BreadcrumbItem } from "@/types"
 
 interface AdminUser {
@@ -14,6 +19,8 @@ interface AdminUser {
   name: string
   email: string
   admin: boolean
+  super_admin: boolean
+  is_self: boolean
   verified: boolean
   must_change_password: boolean
   created_at: string
@@ -23,6 +30,23 @@ interface AdminUser {
 }
 
 defineProps<{ users: AdminUser[] }>()
+
+// Admins create groups; the Admin area itself stays the super admin's.
+function setAdmin(user: AdminUser, admin: boolean) {
+  if (
+    !confirm(
+      admin
+        ? `Make ${user.name} an admin? They'll be able to create groups.`
+        : `Take away ${user.name}'s admin role?`,
+    )
+  )
+    return
+  router.patch(
+    adminUserRoles.update({ user_id: user.id }).url,
+    { admin },
+    { preserveScroll: true },
+  )
+}
 
 const breadcrumbs: BreadcrumbItem[] = [
   { title: "Admin", href: adminUsers.index().url },
@@ -38,9 +62,12 @@ const breadcrumbs: BreadcrumbItem[] = [
       <AdminNav current="users" />
       <div class="flex items-center justify-between">
         <p class="text-muted-foreground max-w-lg text-sm">
-          Only an admin can add a user &mdash; there's no public sign-up.
-          Promoting someone to admin isn't done here; it's a
-          <code class="bg-muted rounded px-1">rails console</code> change.
+          Only you, the super admin, can add a user &mdash; there's no public
+          sign-up. Admins can create groups; the Admin area is yours alone.
+          Making someone a super admin isn't done here; it's
+          <code class="bg-muted rounded px-1"
+            >bin/rails "users:super_admin[email]"</code
+          >.
         </p>
         <Link :href="adminUsers.new()">
           <Button>+ New user</Button>
@@ -57,7 +84,12 @@ const breadcrumbs: BreadcrumbItem[] = [
             <span class="flex items-center gap-2">
               <span class="font-medium">{{ user.name }}</span>
               <span class="text-muted-foreground">{{ user.email }}</span>
-              <Badge v-if="user.admin" variant="default">admin</Badge>
+              <Badge
+                v-if="user.super_admin"
+                class="bg-violet-600 text-white hover:bg-violet-600"
+                >super admin</Badge
+              >
+              <Badge v-else-if="user.admin" variant="default">admin</Badge>
               <Badge v-if="!user.verified" variant="secondary"
                 >unverified</Badge
               >
@@ -104,6 +136,14 @@ const breadcrumbs: BreadcrumbItem[] = [
                 class="underline-offset-2 hover:underline"
                 >Reset password</Link
               >
+              <button
+                v-if="!user.super_admin && !user.is_self"
+                type="button"
+                class="underline-offset-2 hover:underline"
+                @click="setAdmin(user, !user.admin)"
+              >
+                {{ user.admin ? "Remove admin" : "Make admin" }}
+              </button>
             </span>
           </li>
         </ul>

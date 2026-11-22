@@ -35,6 +35,8 @@ export interface User {
   email: string
   avatar?: string
   admin: boolean
+  // Runs the Admin area (users, activity, password resets, roles).
+  super_admin?: boolean
   verified: boolean
   // An admin set their password; they're asked to choose their own.
   must_change_password?: boolean

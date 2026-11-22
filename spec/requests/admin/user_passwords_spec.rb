@@ -5,7 +5,7 @@ require "rails_helper"
 RSpec.describe "Admin: setting a user's password", type: :request do
   fixtures :users
 
-  let(:admin) { users(:admin) }
+  let(:admin) { users(:super_admin) }
   let(:member) { User.create!(name: "Forgetful", email: "forgetful@example.com", password: "Old-password-123", verified: true) }
 
   describe "as an admin" do

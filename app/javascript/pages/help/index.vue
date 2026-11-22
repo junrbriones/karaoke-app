@@ -23,6 +23,9 @@ const page = usePage()
 const isAdmin = computed(
   () => (page.props.auth as { user: User | null }).user?.admin === true,
 )
+const isSuperAdmin = computed(
+  () => (page.props.auth as { user: User | null }).user?.super_admin === true,
+)
 
 const SECTIONS = [
   { id: "getting-around", title: "Getting around" },
@@ -933,9 +936,9 @@ function go(id: string) {
               characters).
             </li>
             <li>
-              <strong>Forgot your password?</strong> Ask an admin to set a new
-              one for you. You'll sign in with it and then be asked to choose
-              your own right away.
+              <strong>Forgot your password?</strong> Ask the super admin to set
+              a new one for you. You'll sign in with it and then be asked to
+              choose your own right away.
             </li>
             <li>
               <strong>Signed in somewhere you shouldn't be?</strong> Settings
@@ -954,30 +957,43 @@ function go(id: string) {
           <h2>For admins</h2>
           <ul>
             <li>
-              <strong>Add a user</strong>: Admin &rarr; Users &rarr;
-              <strong>+ New user</strong>. <strong>Generate password</strong>
-              makes a random one. Tick &ldquo;Mark as verified&rdquo; if you
-              know the email is theirs, and leave &ldquo;Ask them to choose
-              their own password&rdquo; on.
-            </li>
-            <li>
-              <strong>Reset a forgotten password</strong>: Admin &rarr; Users
-              &rarr; <strong>Reset password</strong> next to their name. A
-              random password is ready (<strong>Easy to share</strong> or
-              <strong>Strong</strong>); click <strong>Set password</strong>,
-              then copy the password or the ready-made message and send it to
-              them privately. They're signed out everywhere and choose their own
-              password when they next sign in.
-            </li>
-            <li>
               <strong>Make a group</strong>: Groups &rarr;
               <strong>+ New group</strong>. You become its owner and can add
               members by email.
             </li>
-            <li>
-              <strong>Activity</strong>: Admin &rarr; Activity shows sign-ins,
-              failed sign-ins and changes, by person, kind and date.
-            </li>
+            <template v-if="isSuperAdmin">
+              <li>
+                <strong>The Admin area is the super admin's.</strong> Regular
+                admins can create groups, but don't see Admin in the sidebar.
+              </li>
+              <li>
+                <strong>Add a user</strong>: Admin &rarr; Users &rarr;
+                <strong>+ New user</strong>. <strong>Generate password</strong>
+                makes a random one. Tick &ldquo;Mark as verified&rdquo; if you
+                know the email is theirs, and leave &ldquo;Ask them to choose
+                their own password&rdquo; on.
+              </li>
+              <li>
+                <strong>Make someone an admin</strong> (or not): Admin &rarr;
+                Users &rarr; <strong>Make admin</strong> /
+                <strong>Remove admin</strong> next to their name. A super admin
+                is made from the command line:
+                <code>bin/rails "users:super_admin[email]"</code>.
+              </li>
+              <li>
+                <strong>Reset a forgotten password</strong>: Admin &rarr; Users
+                &rarr; <strong>Reset password</strong> next to their name. A
+                random password is ready (<strong>Easy to share</strong> or
+                <strong>Strong</strong>); click <strong>Set password</strong>,
+                then copy the password or the ready-made message and send it to
+                them privately. They're signed out everywhere and choose their
+                own password when they next sign in.
+              </li>
+              <li>
+                <strong>Activity</strong>: Admin &rarr; Activity shows sign-ins,
+                failed sign-ins and changes, by person, kind and date.
+              </li>
+            </template>
           </ul>
         </section>
       </div>

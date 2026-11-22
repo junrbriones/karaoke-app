@@ -5,6 +5,9 @@ module Admin
   # becomes its owner, same as group creation always worked, and can add
   # other members by email from the group page afterward.
   class GroupsController < BaseController
+    # Any admin (super admins included), not just the super admin.
+    skip_before_action :require_super_admin
+    before_action :require_admin
     def new
       render inertia: "admin/groups/new"
     end

@@ -236,32 +236,40 @@ Tap one for the other ways to play it.
 
 ## Administration
 
-Only an admin can add a user or a group &mdash; there's no public sign-up,
-and creating a group is otherwise gated the same way. An admin gets an
-**Admin** entry in the sidebar, which opens `/admin/users`: a list of every
-user, and a "+ New user" button (name, email, and a password the admin
-sets and shares with them directly). They're sent an email to verify their
-address &mdash; unless the admin ticks **Mark as verified**, vouching for
-the address themselves: the account is verified from the start and no
-email is sent. Creating a group works the same way,
-gated onto the same `/admin/groups/new` form, and the "+ New group" button
-on the Groups page only shows up for an admin.
+There are two roles above an ordinary user:
 
-There's deliberately no interface for granting the admin flag itself
-&mdash; only someone with shell access can create the first admin or
-promote another user, from `bin/rails console`:
+- **Super admin** &mdash; runs the app. Only a super admin gets the **Admin**
+  entry in the sidebar: **Users** (`/admin/users`: every user, "+ New user",
+  **Reset password**, **Make admin** / **Remove admin**) and **Activity**.
+  A super admin can also do everything an admin can.
+- **Admin** &mdash; can create groups ("+ New group" on the Groups page,
+  `/admin/groups/new`), but doesn't see the Admin area: its pages send them
+  back to the dashboard.
 
-```ruby
-User.find_by(email: "someone@example.com").update!(admin: true)
+There's no public sign-up: a super admin adds each user (name, email, and a
+password they set and share directly). The user is sent an email to verify
+their address &mdash; unless **Mark as verified** is ticked, vouching for the
+address: the account is verified from the start and no email is sent.
+
+The super admin makes and unmakes admins from the Users list (logged in
+the activity log). There's deliberately no interface for making a super
+admin &mdash; so nobody can lock everyone else out from inside the app; only
+someone with shell access can, with a rake task:
+
+```sh
+bin/rails "users:super_admin[you@example.com]"
+bin/rails "users:revoke_super_admin[someone@example.com]"
+bin/rails users:roles   # who's a super admin or an admin
 ```
 
-The seeded demo account (`demo@example.com`) is admin by default, so a
-fresh `bin/rails db:seed` always leaves you with at least one.
+The seeded demo account (`demo@example.com`) is a super admin, so a fresh
+`bin/rails db:seed` always leaves you with one. (`users.super_admin`;
+`User#admin?` is true for a super admin too.)
 
 ### Resetting a forgotten password
 
 While the app has no email set up, a "Forgot password?" link can't send
-anything -- so an admin sets a new password instead: **Admin → Users →
+anything -- so the super admin sets a new password instead: **Admin → Users →
 Reset password** next to their name.
 
 - A random password is already filled in when the page opens. **Generate

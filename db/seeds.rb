@@ -3,18 +3,18 @@
 # Seeds a demo account with a few public-domain sample songs, so the app
 # isn't empty on first run. Safe to run more than once.
 #
-# Only an admin can add other users or groups from the app itself -- there's
-# no public sign-up and no UI to grant the admin flag, so this demo account
-# is seeded as an admin directly. Promote any other user the same way, from
-# `bin/rails console`:
+# Only the super admin can add other users from the app itself -- there's
+# no public sign-up and no UI to make a super admin, so this demo account is
+# seeded as one directly. Make another user one with:
 #
-#   User.find_by(email: "someone@example.com").update!(admin: true)
+#   bin/rails "users:super_admin[someone@example.com]"
 
 demo = User.find_or_create_by!(email: "demo@example.com") do |u|
   u.name = "Demo Singer"
   u.password = "password12345"
   u.verified = true
   u.admin = true
+  u.super_admin = true
 end
 
 samples = [

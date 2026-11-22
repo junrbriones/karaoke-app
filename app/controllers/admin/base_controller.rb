@@ -1,13 +1,13 @@
 # frozen_string_literal: true
 
 module Admin
-  # Shared base for the administration area. Every action under this
-  # namespace requires the signed-in user to be an admin -- there's no UI
-  # for granting that flag; it's set directly in the database, e.g. from
-  # `bin/rails console`:
+  # Shared base for the administration area (users, activity, password
+  # resets, roles): the super admin's. Regular admins don't see it -- they
+  # only create groups (Admin::GroupsController). There's no UI for making
+  # a super admin; it's a rake task:
   #
-  #   User.find_by(email: "someone@example.com").update!(admin: true)
+  #   bin/rails "users:super_admin[someone@example.com]"
   class BaseController < InertiaController
-    before_action :require_admin
+    before_action :require_super_admin
   end
 end

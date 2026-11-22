@@ -7,7 +7,7 @@ RSpec.describe "Admin::Users", type: :request do
 
   describe "GET /admin/users" do
     it "lists users for an admin" do
-      sign_in users(:admin)
+      sign_in users(:super_admin)
       get admin_users_path
       expect(response).to have_http_status(:success)
     end
@@ -26,7 +26,7 @@ RSpec.describe "Admin::Users", type: :request do
 
   describe "GET /admin/users/new" do
     it "renders the new user page for an admin" do
-      sign_in users(:admin)
+      sign_in users(:super_admin)
       get new_admin_user_path
       expect(response).to have_http_status(:success)
     end
@@ -40,7 +40,7 @@ RSpec.describe "Admin::Users", type: :request do
 
   describe "POST /admin/users" do
     it "creates a new user without touching the admin's own session" do
-      sign_in users(:admin)
+      sign_in users(:super_admin)
       admin_session_cookie = cookies[:session_token]
 
       expect {
@@ -61,7 +61,7 @@ RSpec.describe "Admin::Users", type: :request do
     end
 
     it "sends a verification email to a user the admin didn't mark verified" do
-      sign_in users(:admin)
+      sign_in users(:super_admin)
       expect {
         post admin_users_path, params: {
           name: "New User", email: "new@example.com",
@@ -73,7 +73,7 @@ RSpec.describe "Admin::Users", type: :request do
     end
 
     it "marks a user verified when the admin ticks the box, with no email" do
-      sign_in users(:admin)
+      sign_in users(:super_admin)
       expect {
         post admin_users_path, params: {
           name: "New User", email: "new@example.com",
@@ -88,7 +88,7 @@ RSpec.describe "Admin::Users", type: :request do
     end
 
     it "treats an unticked box as not verified" do
-      sign_in users(:admin)
+      sign_in users(:super_admin)
       post admin_users_path, params: {
         name: "New User", email: "new@example.com",
         password: "Secret1*3*5*", password_confirmation: "Secret1*3*5*",
@@ -98,7 +98,7 @@ RSpec.describe "Admin::Users", type: :request do
     end
 
     it "rejects an invalid user" do
-      sign_in users(:admin)
+      sign_in users(:super_admin)
       expect {
         post admin_users_path, params: {
           name: "",

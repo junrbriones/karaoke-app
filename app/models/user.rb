@@ -20,6 +20,13 @@ class User < ApplicationRecord
   has_many :memberships, dependent: :destroy
   has_many :groups, through: :memberships
 
+  # Roles: a super admin runs the Admin area (users, activity, password
+  # resets, who's an admin); an admin creates groups. A super admin can do
+  # everything an admin can.
+  def admin?
+    super || super_admin?
+  end
+
   validates :name, presence: true
   validates :email, presence: true, uniqueness: true, format: { with: URI::MailTo::EMAIL_REGEXP }
   validates :password, allow_nil: true, length: { minimum: 12 }

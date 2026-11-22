@@ -17,3 +17,10 @@ admin:
   password_digest: "$2a$04$FPZVbthSpWD4rXvKNiNgzOVDQ3W4ozJjvtr59iUo6hWHCyAiiM9AO"
   verified: true
   admin: true
+
+super_admin:
+  email: super@example.com
+  name: Super Admin
+  password_digest: "$2a$04$FPZVbthSpWD4rXvKNiNgzOVDQ3W4ozJjvtr59iUo6hWHCyAiiM9AO"
+  verified: true
+  super_admin: true

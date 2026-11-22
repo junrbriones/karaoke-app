@@ -46,8 +46,8 @@ import { identityPasswordResets, sessions } from "@/routes"
       <p
         class="text-muted-foreground rounded-lg border p-3 text-center text-sm"
       >
-        No email arriving? Ask an admin &mdash; they can set a new password for
-        you.
+        No email arriving? Ask the super admin &mdash; they can set a new
+        password for you.
       </p>
 
       <div class="text-muted-foreground space-x-1 text-center text-sm">

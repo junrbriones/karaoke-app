@@ -14,6 +14,8 @@ Rails.application.routes.draw do
       # Setting a new password for someone who's forgotten theirs (there's
       # no email to send a reset link with).
       resource :password, only: [ :edit, :update ], controller: "user_passwords"
+      # The super admin makes people admins (or not).
+      resource :role, only: [ :update ], controller: "user_roles"
     end
     resources :groups, only: [ :new, :create ]
     # Who signed in (or tried to), and what they changed.

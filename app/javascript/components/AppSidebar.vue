@@ -59,7 +59,9 @@ const mainNavItems = computed<NavItem[]>(() => {
   ]
 
   const auth = page.props.auth as { user: User }
-  if (auth.user.admin) {
+  // The Admin area is the super admin's (regular admins create groups,
+  // from the Groups page).
+  if (auth.user.super_admin) {
     items.push({
       title: "Admin",
       href: adminUsers.index().url,

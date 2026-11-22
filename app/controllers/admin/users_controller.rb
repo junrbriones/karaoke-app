@@ -65,6 +65,8 @@ module Admin
         name: user.name,
         email: user.email,
         admin: user.admin,
+        super_admin: user.super_admin,
+        is_self: user == Current.user,
         verified: user.verified,
         must_change_password: user.must_change_password,
         created_at: user.created_at

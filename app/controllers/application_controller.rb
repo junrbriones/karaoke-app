@@ -46,6 +46,10 @@ class ApplicationController < ActionController::Base
     redirect_to root_path, alert: "You don't have access to that." unless Current.user&.admin?
   end
 
+  def require_super_admin
+    redirect_to root_path, alert: "You don't have access to that." unless Current.user&.super_admin?
+  end
+
   def perform_authentication
     Current.session ||= Session.find_by_id(cookies.signed[:session_token])
   end

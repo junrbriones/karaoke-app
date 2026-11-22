@@ -82,7 +82,7 @@ RSpec.describe "Admin activity log", type: :request do
     end
 
     it "shows the log to an admin, newest first" do
-      sign_in users(:admin)
+      sign_in users(:super_admin)
       get admin_activity_path
       expect(response).to have_http_status(:success)
 
@@ -92,7 +92,7 @@ RSpec.describe "Admin activity log", type: :request do
     end
 
     it "filters to failed attempts by one person" do
-      sign_in users(:admin)
+      sign_in users(:super_admin)
       get admin_activity_path, params: { user_id: users(:one).id, outcome: "failed" }
       expect(page_props["events"].map { |e| e["action"] }).to eq(%w[sign_in_failed])
     end
